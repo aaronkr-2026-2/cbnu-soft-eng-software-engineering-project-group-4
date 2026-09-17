@@ -4,11 +4,11 @@ Every time you update your project, please make a note of what you did in the `A
 
 ---
 
-## [Milestone name] — [Date]
-**Tool(s) used:**
-**What I asked for:**
-**What I kept as-is:**
-**What I changed or rejected, and why:**
-**Something the AI got wrong that I had to catch:**
+## Initializing the project — 17.09.2026
+**Tool(s) used:** ReactJS, ThreeJS 
+**What I asked for:** I asked AI to initialize the project
+**What I kept as-is:** Nothing because project wasn't created yet
+**What I changed or rejected, and why:** Nothing yet
+**Something the AI got wrong that I had to catch:** AI was messing with folder structure and repeating the code in my codebase 
 
 ---
