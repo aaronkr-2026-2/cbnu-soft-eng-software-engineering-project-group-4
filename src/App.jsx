@@ -434,9 +434,9 @@ JSON Schema:
     // ==========================================
     // BITTA TOZA TO'G'RI ASFALT YO'L
     // ==========================================
-    const roadMat = new THREE.MeshStandardMaterial({ 
-      color: 0x2e2e2e, 
-      roughness: 0.85 
+    const roadMat = new THREE.MeshStandardMaterial({
+      color: 0x2e2e2e,
+      roughness: 0.85
     });
     const roadMesh = new THREE.Mesh(new THREE.PlaneGeometry(50, 6.5), roadMat);
     roadMesh.rotation.x = -Math.PI / 2;
@@ -463,7 +463,7 @@ JSON Schema:
       line.position.set(x, 0.03, 8);
       scene.add(line);
     }
-// ==========================================
+    // ==========================================
     // 2-BALAND BINO MODELI (KAFE ORQASIDA FON)
     // ==========================================
     gltfLoader.load(
@@ -498,18 +498,18 @@ JSON Schema:
       undefined,
       (err) => console.error("skyscraper2.glb yuklashda xatolik:", err)
     );
-    
+
     // ==========================================
     // YANGI 3D DARAXT (YO'L BO'YI ALLEYASI)
     // ==========================================
     const treeRowPositions = [
       { x: -18, z: 13.0 },
       { x: -12, z: 13.0 },
-      { x: -6,  z: 13.0 },
-      { x: 0,   z: 13.0 },
-      { x: 6,   z: 13.0 },
-      { x: 12,  z: 13.0 },
-      { x: 18,  z: 13.0 }
+      { x: -6, z: 13.0 },
+      { x: 0, z: 13.0 },
+      { x: 6, z: 13.0 },
+      { x: 12, z: 13.0 },
+      { x: 18, z: 13.0 }
     ];
 
     gltfLoader.load(
@@ -575,8 +575,8 @@ JSON Schema:
         const carConfigs = [
           { startX: -25, z: 9.6, speed: 0.18, dir: 1 },
           { startX: -10, z: 9.6, speed: 0.23, dir: 1 },
-          { startX:  20, z: 6.4, speed: 0.16, dir: -1 },
-          { startX:   5, z: 6.4, speed: 0.21, dir: -1 }
+          { startX: 20, z: 6.4, speed: 0.16, dir: -1 },
+          { startX: 5, z: 6.4, speed: 0.21, dir: -1 }
         ];
 
         carConfigs.forEach((cfg) => {
@@ -941,7 +941,7 @@ JSON Schema:
             else if (minOverlap === overlapRight) x = bRight + r;
           }
         }
-// KAFE ORQASIDAGI BINO TO'SIG'I (x: -15, z: -10)
+        // KAFE ORQASIDAGI BINO TO'SIG'I (x: -15, z: -10)
         const b2MinX = -15 - 3.5;
         const b2MaxX = -15 + 3.5;
         const b2MinZ = -10 - 3.5;
@@ -1399,8 +1399,8 @@ JSON Schema:
                           exitEvaluation.score > 70
                             ? "#4caf50"
                             : exitEvaluation.score > 40
-                            ? "#ff9800"
-                            : "#f44336",
+                              ? "#ff9800"
+                              : "#f44336",
                         transition: "width 0.4s ease"
                       }}
                     />
@@ -1621,10 +1621,10 @@ JSON Schema:
                     dialogState.status === "listening"
                       ? "#ff5252"
                       : dialogState.status === "speaking"
-                      ? "#4caf50"
-                      : dialogState.status === "thinking"
-                      ? "#64b5f6"
-                      : "#aaa"
+                        ? "#4caf50"
+                        : dialogState.status === "thinking"
+                          ? "#64b5f6"
+                          : "#aaa"
                 }}
               >
                 {dialogState.status.toUpperCase()}
