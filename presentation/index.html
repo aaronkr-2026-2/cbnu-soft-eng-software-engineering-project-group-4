@@ -1,0 +1,523 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>AI Language Village — Loyiha taqdimoti</title>
+<meta name="description" content="AI Language Village: 3D qishloqda sun'iy intellekt NPC'lar bilan jonli suhbat orqali ingliz tilini o'rganish platformasi." />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    --bg: #0b0f1a;
+    --bg2: #111827;
+    --card: rgba(255, 255, 255, 0.05);
+    --border: rgba(255, 255, 255, 0.1);
+    --text: #e8ecf4;
+    --muted: #94a0b8;
+    --teal: hsl(172, 70%, 55%);
+    --orange: hsl(28, 95%, 62%);
+    --violet: hsl(258, 85%, 72%);
+    --pink: hsl(330, 85%, 66%);
+    --green: hsl(145, 63%, 52%);
+    --red: hsl(0, 80%, 64%);
+    --grad: linear-gradient(120deg, var(--teal), var(--violet) 55%, var(--orange));
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { width: 100%; height: 100%; overflow: hidden; background: var(--bg); color: var(--text); font-family: "Outfit", system-ui, sans-serif; }
+
+  /* Animated background */
+  .bg-orbs { position: fixed; inset: 0; z-index: 0; pointer-events: none; overflow: hidden; }
+  .orb { position: absolute; border-radius: 50%; filter: blur(90px); opacity: 0.35; animation: float 18s ease-in-out infinite; }
+  .orb.o1 { width: 520px; height: 520px; background: var(--teal); top: -160px; left: -120px; }
+  .orb.o2 { width: 460px; height: 460px; background: var(--violet); bottom: -180px; right: -100px; animation-delay: -6s; }
+  .orb.o3 { width: 340px; height: 340px; background: var(--orange); top: 40%; left: 55%; opacity: 0.18; animation-delay: -12s; }
+  @keyframes float { 0%,100% { transform: translate(0,0) scale(1); } 50% { transform: translate(40px,-30px) scale(1.08); } }
+  .grid-overlay { position: fixed; inset: 0; z-index: 0; pointer-events: none;
+    background-image: linear-gradient(rgba(255,255,255,0.025) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.025) 1px, transparent 1px);
+    background-size: 48px 48px; mask-image: radial-gradient(ellipse at center, black 30%, transparent 80%); }
+
+  /* Slides */
+  .deck { position: relative; z-index: 1; width: 100%; height: 100%; }
+  .slide { position: absolute; inset: 0; display: flex; flex-direction: column; justify-content: center; padding: 6vh 8vw;
+    opacity: 0; visibility: hidden; transform: translateX(60px) scale(0.98); transition: opacity .6s ease, transform .6s cubic-bezier(.2,.8,.2,1), visibility .6s; }
+  .slide.active { opacity: 1; visibility: visible; transform: none; }
+  .slide.prev { transform: translateX(-60px) scale(0.98); }
+
+  .slide .reveal { opacity: 0; transform: translateY(24px); transition: opacity .6s ease, transform .6s cubic-bezier(.2,.8,.2,1); }
+  .slide.active .reveal { opacity: 1; transform: none; }
+  .slide.active .reveal:nth-child(1) { transition-delay: .10s; }
+  .slide.active .reveal:nth-child(2) { transition-delay: .20s; }
+  .slide.active .reveal:nth-child(3) { transition-delay: .30s; }
+  .slide.active .reveal:nth-child(4) { transition-delay: .40s; }
+  .slide.active .reveal:nth-child(5) { transition-delay: .50s; }
+  .slide.active .reveal:nth-child(6) { transition-delay: .60s; }
+  .slide.active .reveal:nth-child(7) { transition-delay: .70s; }
+
+  .eyebrow { font-family: "JetBrains Mono", monospace; font-size: .85rem; letter-spacing: .2em; text-transform: uppercase; color: var(--teal); margin-bottom: 1rem; }
+  h1 { font-size: clamp(2.6rem, 6vw, 5.2rem); font-weight: 800; line-height: 1.02; letter-spacing: -0.02em; }
+  h2 { font-size: clamp(2rem, 4vw, 3.2rem); font-weight: 800; letter-spacing: -0.015em; margin-bottom: 2.4rem; }
+  h3 { font-size: 1.25rem; font-weight: 600; margin-bottom: .5rem; }
+  p, li { color: var(--muted); font-size: clamp(1rem, 1.3vw, 1.2rem); line-height: 1.6; }
+  .grad-text { background: var(--grad); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  strong { color: var(--text); }
+
+  /* Cover */
+  .cover { padding: 0; }
+  .cover-img { position: absolute; inset: 0; background: url("cover.jpg") center/cover no-repeat; transform: scale(1.08); transition: transform 8s ease; }
+  .slide.active .cover-img { transform: scale(1); }
+  .cover-shade { position: absolute; inset: 0; background: linear-gradient(90deg, rgba(11,15,26,.96) 0%, rgba(11,15,26,.75) 45%, rgba(11,15,26,.1) 100%); }
+  .cover-content { position: relative; padding: 0 8vw; max-width: 900px; }
+  .cover-content p { font-size: 1.35rem; margin-top: 1.4rem; max-width: 620px; }
+  .pill-row { display: flex; gap: .6rem; flex-wrap: wrap; margin-top: 2rem; }
+  .pill { padding: .45rem 1rem; border-radius: 999px; background: var(--card); border: 1px solid var(--border); font-size: .9rem; color: var(--text); backdrop-filter: blur(10px); }
+
+  /* Cards */
+  .grid { display: grid; gap: 1.4rem; }
+  .g2 { grid-template-columns: repeat(2, 1fr); }
+  .g3 { grid-template-columns: repeat(3, 1fr); }
+  .g4 { grid-template-columns: repeat(4, 1fr); }
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: 20px; padding: 1.6rem; backdrop-filter: blur(14px);
+    transition: transform .3s ease, border-color .3s ease, box-shadow .3s ease; position: relative; overflow: hidden; }
+  .card:hover { transform: translateY(-6px); border-color: rgba(255,255,255,.25); box-shadow: 0 20px 40px rgba(0,0,0,.35); }
+  .card .icon { font-size: 2rem; margin-bottom: .8rem; display: inline-flex; width: 56px; height: 56px; align-items: center; justify-content: center; border-radius: 16px; background: rgba(255,255,255,.06); }
+  .card p { font-size: 1rem; }
+  .card.accent-teal { border-top: 3px solid var(--teal); }
+  .card.accent-orange { border-top: 3px solid var(--orange); }
+  .card.accent-violet { border-top: 3px solid var(--violet); }
+  .card.accent-pink { border-top: 3px solid var(--pink); }
+  .card.accent-red { border-top: 3px solid var(--red); }
+  .card.accent-green { border-top: 3px solid var(--green); }
+
+  /* Flow */
+  .flow { display: flex; align-items: stretch; gap: .6rem; }
+  .flow .step { flex: 1; text-align: center; padding: 1.4rem 1rem; }
+  .flow .step .num { font-family: "JetBrains Mono", monospace; font-size: .8rem; color: var(--teal); }
+  .flow .step .big { font-size: 2.4rem; margin: .4rem 0; }
+  .flow .arrow { align-self: center; color: var(--muted); font-size: 1.6rem; animation: nudge 1.6s ease-in-out infinite; }
+  @keyframes nudge { 0%,100% { transform: translateX(0); opacity:.5; } 50% { transform: translateX(5px); opacity:1; } }
+  kbd { font-family: "JetBrains Mono", monospace; background: rgba(255,255,255,.1); border: 1px solid var(--border); border-bottom-width: 3px; border-radius: 6px; padding: .1rem .5rem; color: var(--text); font-size: .9em; }
+
+  /* Mission */
+  .mission { display: flex; gap: 1.4rem; align-items: flex-start; }
+  .mission .avatar { width: 78px; height: 78px; flex-shrink: 0; border-radius: 22px; display: flex; align-items: center; justify-content: center; font-size: 2.4rem; }
+  .bubble { margin-top: 1rem; background: rgba(255,255,255,.06); border-radius: 14px 14px 14px 4px; padding: .8rem 1rem; font-size: .95rem; color: var(--text); font-style: italic; }
+  .bubble.user { background: rgba(25,118,210,.35); border-radius: 14px 14px 4px 14px; margin-left: 2.5rem; }
+  .goal { margin-top: 1rem; font-family: "JetBrains Mono", monospace; font-size: .9rem; color: var(--orange); }
+
+  /* Stack */
+  .tech { display: flex; align-items: center; gap: 1rem; }
+  .tech .logo { width: 52px; height: 52px; border-radius: 14px; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 1rem; flex-shrink: 0; }
+  .tech .ver { font-family: "JetBrains Mono", monospace; font-size: .8rem; color: var(--teal); }
+
+  /* Architecture */
+  .arch { display: grid; grid-template-columns: 1fr 1.3fr 1fr; gap: 1.6rem; align-items: center; }
+  .layer { border-radius: 20px; padding: 1.4rem; border: 1px dashed var(--border); background: rgba(255,255,255,.025); }
+  .layer .title { font-family: "JetBrains Mono", monospace; font-size: .8rem; letter-spacing: .15em; color: var(--muted); margin-bottom: 1rem; text-transform: uppercase; }
+  .node { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: .7rem 1rem; margin-bottom: .6rem; font-size: .95rem; display: flex; justify-content: space-between; gap: .6rem; }
+  .node code { font-family: "JetBrains Mono", monospace; color: var(--teal); font-size: .8rem; }
+  .node:last-child { margin-bottom: 0; }
+  .core { text-align: center; padding: 2rem 1.4rem; border-radius: 24px; background: linear-gradient(160deg, rgba(120,90,255,.18), rgba(40,200,180,.12)); border: 1px solid rgba(255,255,255,.18); box-shadow: 0 0 60px rgba(120,90,255,.18); }
+  .core .state { display: grid; grid-template-columns: 1fr 1fr; gap: .5rem; margin-top: 1rem; }
+  .core .state span { font-family: "JetBrains Mono", monospace; font-size: .78rem; background: rgba(0,0,0,.3); padding: .4rem; border-radius: 8px; color: var(--text); }
+
+  /* Pipeline */
+  .pipeline { display: flex; align-items: center; gap: 1rem; margin-bottom: 2rem; }
+  .pipe { flex: 1; border-radius: 18px; padding: 1.4rem; text-align: center; position: relative; }
+  .pipe .tag { font-family: "JetBrains Mono", monospace; font-size: .75rem; letter-spacing: .1em; opacity: .85; }
+  .pipe .big { font-size: 2.2rem; margin: .4rem 0; }
+  .pipe.p1 { background: linear-gradient(160deg, rgba(255,82,82,.25), rgba(255,82,82,.05)); border: 1px solid rgba(255,82,82,.35); }
+  .pipe.p2 { background: linear-gradient(160deg, rgba(100,181,246,.25), rgba(100,181,246,.05)); border: 1px solid rgba(100,181,246,.35); }
+  .pipe.p3 { background: linear-gradient(160deg, rgba(76,175,80,.25), rgba(76,175,80,.05)); border: 1px solid rgba(76,175,80,.35); }
+  .pipe.p4 { background: linear-gradient(160deg, rgba(255,183,77,.25), rgba(255,183,77,.05)); border: 1px solid rgba(255,183,77,.35); }
+  .dots { display: flex; gap: 5px; }
+  .dots i { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); animation: blink 1.2s infinite; }
+  .dots i:nth-child(2) { animation-delay: .2s; } .dots i:nth-child(3) { animation-delay: .4s; }
+  @keyframes blink { 0%,100% { opacity: .2; } 50% { opacity: 1; } }
+  pre.code { font-family: "JetBrains Mono", monospace; font-size: .85rem; line-height: 1.6; background: rgba(0,0,0,.4); border: 1px solid var(--border); border-radius: 14px; padding: 1.2rem 1.4rem; color: #cfd8e3; overflow: hidden; }
+  .k { color: var(--violet); } .s { color: var(--green); } .n { color: var(--orange); } .c { color: #6b7790; }
+
+  /* Evaluation mock */
+  .eval-wrap { display: grid; grid-template-columns: 1fr 1fr; gap: 3rem; align-items: center; }
+  .eval { background: #1e1e24; border: 1px solid rgba(255,255,255,.15); border-radius: 20px; padding: 1.8rem; box-shadow: 0 30px 60px rgba(0,0,0,.5); }
+  .eval h3 { color: var(--green); font-size: 1.5rem; }
+  .bar { height: 10px; background: #333; border-radius: 6px; overflow: hidden; margin: .5rem 0 1.4rem; }
+  .bar > div { height: 100%; width: 0; background: linear-gradient(90deg, var(--green), var(--teal)); border-radius: 6px; transition: width 1.4s cubic-bezier(.2,.8,.2,1) .5s; }
+  .slide.active .bar > div { width: 88%; }
+  .mistake { background: rgba(255,255,255,.06); border-left: 3px solid var(--red); padding: .7rem .9rem; border-radius: 8px; font-size: .9rem; color: var(--text); margin: .6rem 0 1.2rem; }
+  .summary { background: rgba(255,255,255,.05); border-radius: 10px; padding: .8rem; font-size: .9rem; color: #ddd; }
+  ul.check { list-style: none; }
+  ul.check li { padding-left: 2rem; position: relative; margin-bottom: 1rem; }
+  ul.check li::before { content: "✓"; position: absolute; left: 0; top: 0; width: 1.4rem; height: 1.4rem; border-radius: 50%; background: rgba(76,175,80,.2); color: var(--green); font-size: .8rem; display: flex; align-items: center; justify-content: center; margin-top: .25rem; }
+
+  /* Stats */
+  .stat { text-align: center; }
+  .stat .val { font-size: clamp(2.6rem, 5vw, 4rem); font-weight: 800; line-height: 1; }
+  .stat .lbl { color: var(--muted); margin-top: .5rem; }
+  .tree { font-family: "JetBrains Mono", monospace; font-size: .88rem; line-height: 1.75; color: #cfd8e3; white-space: pre; }
+  .tree .d { color: var(--teal); } .tree .m { color: #6b7790; }
+
+  /* Roadmap */
+  .roadmap { position: relative; display: grid; grid-template-columns: repeat(4, 1fr); gap: 1.4rem; }
+  .roadmap::before { content: ""; position: absolute; top: 22px; left: 5%; right: 5%; height: 2px; background: var(--grad); opacity: .5; }
+  .milestone { position: relative; padding-top: 3.4rem; }
+  .milestone .dot { position: absolute; top: 10px; left: 0; width: 26px; height: 26px; border-radius: 50%; background: var(--bg); border: 3px solid var(--teal); box-shadow: 0 0 20px var(--teal); }
+  .milestone:nth-child(2) .dot { border-color: var(--violet); box-shadow: 0 0 20px var(--violet); }
+  .milestone:nth-child(3) .dot { border-color: var(--pink); box-shadow: 0 0 20px var(--pink); }
+  .milestone:nth-child(4) .dot { border-color: var(--orange); box-shadow: 0 0 20px var(--orange); }
+  .milestone .when { font-family: "JetBrains Mono", monospace; font-size: .8rem; color: var(--muted); }
+  .milestone ul { margin-top: .6rem; padding-left: 1.1rem; }
+  .milestone li { font-size: .95rem; margin-bottom: .3rem; }
+
+  /* End */
+  .end { text-align: center; align-items: center; }
+  .end h1 { font-size: clamp(3rem, 8vw, 7rem); }
+  .end .cmd { margin-top: 2rem; display: inline-block; font-family: "JetBrains Mono", monospace; background: rgba(0,0,0,.45); border: 1px solid var(--border); padding: 1rem 1.6rem; border-radius: 14px; color: var(--green); font-size: 1.05rem; }
+
+  /* Chrome */
+  .progress { position: fixed; top: 0; left: 0; height: 3px; background: var(--grad); z-index: 10; transition: width .5s ease; }
+  .hud { position: fixed; bottom: 22px; right: 28px; z-index: 10; display: flex; align-items: center; gap: .8rem; }
+  .hud button { width: 42px; height: 42px; border-radius: 12px; border: 1px solid var(--border); background: var(--card); color: var(--text); font-size: 1.1rem; cursor: pointer; backdrop-filter: blur(10px); transition: background .2s, transform .2s; }
+  .hud button:hover { background: rgba(255,255,255,.14); transform: translateY(-2px); }
+  .counter { font-family: "JetBrains Mono", monospace; font-size: .85rem; color: var(--muted); min-width: 60px; text-align: center; }
+  .brand { position: fixed; bottom: 30px; left: 28px; z-index: 10; font-family: "JetBrains Mono", monospace; font-size: .78rem; color: var(--muted); letter-spacing: .1em; }
+  .hint { position: fixed; top: 16px; right: 24px; z-index: 10; font-size: .78rem; color: var(--muted); opacity: .7; }
+
+  @media (max-width: 900px) {
+    .g3, .g4, .arch, .eval-wrap, .roadmap { grid-template-columns: 1fr 1fr; }
+    .flow, .pipeline { flex-wrap: wrap; } .flow .arrow, .pipeline .arrow { display: none; }
+  }
+</style>
+</head>
+<body>
+<div class="bg-orbs"><div class="orb o1"></div><div class="orb o2"></div><div class="orb o3"></div></div>
+<div class="grid-overlay"></div>
+<div class="progress" id="progress"></div>
+<div class="hint">← → yoki Space · <kbd>F</kbd> to'liq ekran</div>
+
+<main class="deck" id="deck">
+
+  <!-- 1. COVER -->
+  <section class="slide cover active" aria-label="Muqova">
+    <div class="cover-img"></div>
+    <div class="cover-shade"></div>
+    <div class="cover-content">
+      <div class="eyebrow reveal">Software Engineering · Group 4</div>
+      <h1 class="reveal">AI Language<br /><span class="grad-text">Village</span></h1>
+      <p class="reveal">3D qishloqda sun'iy intellekt NPC'lar bilan <strong>jonli ovozli suhbat</strong> orqali ingliz tilini o'rganish platformasi.</p>
+      <div class="pill-row reveal">
+        <span class="pill">🎮 React Three Fiber</span>
+        <span class="pill">🧠 Groq LLM</span>
+        <span class="pill">🎙️ Speech-to-Text</span>
+        <span class="pill">🔊 Text-to-Speech</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- 2. PROBLEM -->
+  <section class="slide" aria-label="Muammo">
+    <div class="eyebrow reveal">01 · Muammo</div>
+    <h2 class="reveal">Til o'rganuvchilar <span class="grad-text">gapirishdan qo'rqishadi</span></h2>
+    <div class="grid g3">
+      <div class="card accent-red reveal"><div class="icon">😰</div><h3>Amaliyot yetishmaydi</h3><p>Grammatikani bilish mumkin, lekin real vaziyatda (do'kon, kafe) gapirish imkoniyati juda kam.</p></div>
+      <div class="card accent-orange reveal"><div class="icon">📚</div><h3>Zerikarli darsliklar</h3><p>Odatiy ilovalar test va kartochkalardan iborat — kontekst va immersiya yo'q.</p></div>
+      <div class="card accent-violet reveal"><div class="icon">🧑‍🏫</div><h3>Qimmat repetitor</h3><p>Shaxsiy fikr-mulohaza (feedback) olish uchun ustoz kerak — bu qimmat va har doim ham mavjud emas.</p></div>
+    </div>
+  </section>
+
+  <!-- 3. SOLUTION -->
+  <section class="slide" aria-label="Yechim">
+    <div class="eyebrow reveal">02 · Yechim</div>
+    <h2 class="reveal">O'yin + AI = <span class="grad-text">xavfsiz amaliyot maydoni</span></h2>
+    <div class="grid g2">
+      <div class="card accent-teal reveal"><div class="icon">🏘️</div><h3>Immersiv 3D qishloq</h3><p>Foydalanuvchi o'z personaji bilan ko'cha, do'kon va kafe bo'ylab erkin yuradi. Mashinalar harakatlanadi, muhit jonli.</p></div>
+      <div class="card accent-violet reveal"><div class="icon">🤖</div><h3>AI NPC'lar</h3><p>Sotuvchi <strong>Jack</strong> va barista <strong>Mia</strong> — har biri o'z xarakteriga ega, har qanday savolga tabiiy ingliz tilida javob beradi.</p></div>
+      <div class="card accent-pink reveal"><div class="icon">🎯</div><h3>Missiyalar</h3><p>Har bir binoda aniq vazifa: masalan, "2 ta suv va 1 ta olma sotib oling". Maqsadli, real hayotiy dialog.</p></div>
+      <div class="card accent-green reveal"><div class="icon">📊</div><h3>O'zbek tilida baholash</h3><p>Chiqishda AI suhbatni tahlil qiladi: ball, xatolar va to'g'ri variantlar — ona tilida tushuntiriladi.</p></div>
+    </div>
+  </section>
+
+  <!-- 4. USER FLOW -->
+  <section class="slide" aria-label="Qanday ishlaydi">
+    <div class="eyebrow reveal">03 · Foydalanuvchi yo'li</div>
+    <h2 class="reveal">Qanday ishlaydi?</h2>
+    <div class="flow reveal">
+      <div class="card step"><div class="num">01</div><div class="big">🚶</div><h3>Sayr</h3><p><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> + sichqoncha</p></div>
+      <div class="arrow">→</div>
+      <div class="card step"><div class="num">02</div><div class="big">🚪</div><h3>Kirish</h3><p>Eshik oldida <kbd>E</kbd></p></div>
+      <div class="arrow">→</div>
+      <div class="card step"><div class="num">03</div><div class="big">📜</div><h3>Missiya</h3><p>Vazifa kartasi ochiladi</p></div>
+      <div class="arrow">→</div>
+      <div class="card step"><div class="num">04</div><div class="big">💬</div><h3>Suhbat</h3><p><kbd>F</kbd> — ovoz yoki matn</p></div>
+      <div class="arrow">→</div>
+      <div class="card step"><div class="num">05</div><div class="big">🏆</div><h3>Natija</h3><p>Chiqishda AI baholaydi</p></div>
+    </div>
+  </section>
+
+  <!-- 5. MISSIONS -->
+  <section class="slide" aria-label="Missiyalar">
+    <div class="eyebrow reveal">04 · Missiyalar</div>
+    <h2 class="reveal">Ikki joy — <span class="grad-text">ikki xarakter</span></h2>
+    <div class="grid g2">
+      <div class="card accent-teal reveal">
+        <div class="mission">
+          <div class="avatar" style="background: linear-gradient(135deg, hsl(172,70%,40%), hsl(200,70%,40%));">🏪</div>
+          <div style="flex:1">
+            <h3>Village Shop · Jack</h3>
+            <p>Jonli, quvnoq do'kondor.</p>
+            <div class="goal">🎯 Buy 2 bottles of water and 1 apple</div>
+            <div class="bubble">"Hello! Welcome to our village shop. What can I get for you today?"</div>
+            <div class="bubble user">"Could I have two bottles of water and an apple, please?"</div>
+          </div>
+        </div>
+      </div>
+      <div class="card accent-orange reveal">
+        <div class="mission">
+          <div class="avatar" style="background: linear-gradient(135deg, hsl(28,90%,50%), hsl(345,80%,55%));">☕</div>
+          <div style="flex:1">
+            <h3>Language Cafe · Mia</h3>
+            <p>Samimiy, do'stona barista.</p>
+            <div class="goal">🎯 Order 1 hot Americano and 1 croissant</div>
+            <div class="bubble">"Hi there! Welcome to the Language Cafe. What can I brew for you today?"</div>
+            <div class="bubble user">"I'd like a hot Americano and a croissant, please."</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 6. AI PIPELINE -->
+  <section class="slide" aria-label="AI pipeline">
+    <div class="eyebrow reveal">05 · AI pipeline</div>
+    <h2 class="reveal">Ovozdan ovozgacha — <span class="grad-text">real vaqtda</span></h2>
+    <div class="pipeline reveal">
+      <div class="pipe p1"><div class="tag">LISTENING</div><div class="big">🎙️</div><h3>Speech-to-Text</h3><p>Web Speech API<br />(en-US)</p></div>
+      <div class="dots"><i></i><i></i><i></i></div>
+      <div class="pipe p2"><div class="tag">THINKING</div><div class="big">🧠</div><h3>Groq LLM</h3><p>gpt-oss-120b<br />oxirgi 4 xabar konteksti</p></div>
+      <div class="dots"><i></i><i></i><i></i></div>
+      <div class="pipe p3"><div class="tag">SPEAKING</div><div class="big">🔊</div><h3>Text-to-Speech</h3><p>speechSynthesis<br />NPC animatsiyasi bilan</p></div>
+      <div class="dots"><i></i><i></i><i></i></div>
+      <div class="pipe p4"><div class="tag">ON EXIT</div><div class="big">📋</div><h3>Examiner AI</h3><p>JSON baholash<br />temperature 0.2</p></div>
+    </div>
+<pre class="code reveal"><span class="c">// NPC personasi — har bir xarakter uchun system prompt</span>
+<span class="k">const</span> systemPrompt = npc === <span class="s">"Shop Seller"</span>
+  ? <span class="s">`You are Jack, a lively shopkeeper... 1-2 short English sentences`</span>
+  : <span class="s">`You are Mia, a friendly cafe barista... 1-2 short English sentences`</span>;
+<span class="k">await</span> fetch(<span class="s">"https://api.groq.com/openai/v1/chat/completions"</span>, { model: <span class="s">"openai/gpt-oss-120b"</span>, max_tokens: <span class="n">250</span>, temperature: <span class="n">0.8</span> });</pre>
+  </section>
+
+  <!-- 7. EVALUATION -->
+  <section class="slide" aria-label="Baholash">
+    <div class="eyebrow reveal">06 · Aqlli baholash</div>
+    <div class="eval-wrap">
+      <div>
+        <h2 class="reveal">Imtihonchi AI <span class="grad-text">o'zbek tilida</span> tushuntiradi</h2>
+        <ul class="check reveal">
+          <li><strong>Og'zaki nutqqa moslashgan</strong> — katta harf va tinish belgilari xato hisoblanmaydi.</li>
+          <li><strong>Missiya bajarilganini</strong> tekshiradi (to'g'ri mahsulot va miqdor).</li>
+          <li><strong>Real grammatik xatolar</strong>: "I wants", "two apple" → to'g'ri varianti bilan.</li>
+          <li>Natija qat'iy <strong>JSON</strong> formatda: <code>score</code>, <code>completed</code>, <code>mistakes</code>, <code>feedback</code>.</li>
+        </ul>
+      </div>
+      <div class="eval reveal">
+        <h3>🎉 Vazifa Bajarildi!</h3>
+        <p style="font-size:.9rem">Chiqish oldidan til tahlili hisoboti:</p>
+        <div style="display:flex;justify-content:space-between;margin-top:1rem;color:var(--text)"><span>Bajarilish darajasi:</span><strong style="color:#64b5f6">88%</strong></div>
+        <div class="bar"><div></div></div>
+        <strong style="color:var(--red);font-size:.9rem">Xatolar va to'g'rilash:</strong>
+        <div class="mistake">Siz aytdingiz: 'give me two apple' ➔ To'g'risi: 'Could I have two apples, please?' (Izoh: ko'plikda -s qo'shiladi, so'rov muloyimroq bo'ladi)</div>
+        <div class="summary"><strong style="color:#64b5f6">Umumiy xulosa:</strong> Vazifani a'lo darajada bajardingiz! Muloyim iboralardan foydalanishda davom eting.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 8. TECH STACK -->
+  <section class="slide" aria-label="Texnologiyalar">
+    <div class="eyebrow reveal">07 · Texnologiyalar</div>
+    <h2 class="reveal">Zamonaviy <span class="grad-text">web stack</span></h2>
+    <div class="grid g3">
+      <div class="card reveal tech"><div class="logo" style="background:#20232a;color:#61dafb">⚛</div><div><h3>React 19</h3><div class="ver">^19.2.8</div><p>UI holati, modallar, chat oynasi</p></div></div>
+      <div class="card reveal tech"><div class="logo" style="background:#000;color:#fff">3D</div><div><h3>Three.js + R3F</h3><div class="ver">three ^0.186 · fiber ^9.8</div><p>3D sahna, soyalar, animatsiya</p></div></div>
+      <div class="card reveal tech"><div class="logo" style="background:#1a1a2e;color:var(--violet)">drei</div><div><h3>@react-three/drei</h3><div class="ver">^10.7.9</div><p>useGLTF, useAnimations yordamchilari</p></div></div>
+      <div class="card reveal tech"><div class="logo" style="background:linear-gradient(135deg,#646cff,#bd34fe);color:#fff">⚡</div><div><h3>Vite 8</h3><div class="ver">^8.3.0</div><p>Tezkor dev-server va HMR</p></div></div>
+      <div class="card reveal tech"><div class="logo" style="background:#f55036;color:#fff">G</div><div><h3>Groq Cloud API</h3><div class="ver">openai/gpt-oss-120b</div><p>Juda tez LLM inferensi</p></div></div>
+      <div class="card reveal tech"><div class="logo" style="background:#0f3d3a;color:var(--teal)">🎙</div><div><h3>Web Speech API</h3><div class="ver">STT + TTS</div><p>Brauzerning o'zida, qo'shimcha server yo'q</p></div></div>
+    </div>
+  </section>
+
+  <!-- 9. ARCHITECTURE -->
+  <section class="slide" aria-label="Arxitektura">
+    <div class="eyebrow reveal">08 · Arxitektura</div>
+    <h2 class="reveal">Komponentlar tuzilishi</h2>
+    <div class="arch reveal">
+      <div class="layer">
+        <div class="title">UI qatlami (HTML overlay)</div>
+        <div class="node">Boshqaruv eslatmasi <code>HUD</code></div>
+        <div class="node">Missiya kartasi <code>modal</code></div>
+        <div class="node">Chat oynasi <code>dialog</code></div>
+        <div class="node">Natija hisoboti <code>eval</code></div>
+      </div>
+      <div class="core">
+        <div class="eyebrow" style="margin-bottom:.4rem">App.jsx</div>
+        <h3 style="font-size:1.6rem">Markaziy holat</h3>
+        <p style="font-size:.95rem">Joylashuv, dialog, missiya va AI chaqiruvlarini boshqaradi</p>
+        <div class="state">
+          <span>currentLocation</span><span>dialogState</span>
+          <span>activeMission</span><span>exitEvaluation</span>
+          <span>playerRef</span><span>cameraAnglesRef</span>
+        </div>
+      </div>
+      <div class="layer">
+        <div class="title">3D qatlam · VillageCanvas</div>
+        <div class="node">Environment <code>yo'l, daraxt, bino</code></div>
+        <div class="node">Traffic <code>mashinalar</code></div>
+        <div class="node">Shop · Cafe <code>NPC + interyer</code></div>
+        <div class="node">Player <code>WASD, kolliziya</code></div>
+        <div class="node">CameraController <code>orbit</code></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 10. STATS -->
+  <section class="slide" aria-label="Statistika">
+    <div class="eyebrow reveal">09 · Loyiha raqamlarda</div>
+    <h2 class="reveal">Kod bazasi</h2>
+    <div class="grid g4 reveal" style="margin-bottom:2.4rem">
+      <div class="card stat"><div class="val grad-text" data-count="1708">0</div><div class="lbl">qator kod</div></div>
+      <div class="card stat"><div class="val grad-text" data-count="7">0</div><div class="lbl">3D komponent</div></div>
+      <div class="card stat"><div class="val grad-text" data-count="15">0</div><div class="lbl">GLB 3D model</div></div>
+      <div class="card stat"><div class="val grad-text" data-count="2">0</div><div class="lbl">AI NPC</div></div>
+    </div>
+    <div class="grid g2 reveal">
+      <div class="card"><div class="tree">
+<span class="d">AI-Language-Village/</span>
+├── <span class="d">public/models/</span>   <span class="m"># player, seller, barista, car, cafe…</span>
+├── <span class="d">src/</span>
+│   ├── App.jsx          <span class="m"># holat + AI + UI</span>
+│   ├── main.jsx
+│   └── <span class="d">components/r3f/</span>
+│       ├── VillageCanvas · Environment
+│       ├── Player · CameraController
+│       └── Shop · Cafe · Traffic
+└── .env                 <span class="m"># VITE_GROQ_API_KEY</span></div></div>
+      <div class="card">
+        <h3>Muhim texnik yechimlar</h3>
+        <ul style="padding-left:1.1rem;margin-top:.6rem">
+          <li>Binolar uchun <strong>AABB kolliziya</strong> (BUILDINGS_CONFIG)</li>
+          <li>Har bir mashina uchun <strong>mustaqil klon</strong> va avto-masshtab</li>
+          <li>NPC gapirganda <strong>isTalking</strong> animatsiyasi</li>
+          <li>Shadow acne'siz yorug'lik (<code>shadow-bias</code>)</li>
+          <li><strong>Suspense</strong> orqali modellarni xavfsiz yuklash</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- 11. CHALLENGES -->
+  <section class="slide" aria-label="Qiyinchiliklar">
+    <div class="eyebrow reveal">10 · Qiyinchiliklar</div>
+    <h2 class="reveal">Muammolar va <span class="grad-text">yechimlar</span></h2>
+    <div class="grid g3">
+      <div class="card accent-orange reveal"><div class="icon">🎤</div><h3>STT xatolari</h3><p>Mikrofon matnida katta harf va tinish belgisi yo'q. <strong>Yechim:</strong> baholash promptida ularni e'tiborsiz qoldirish qoidasi.</p></div>
+      <div class="card accent-violet reveal"><div class="icon">🧾</div><h3>LLM javob formati</h3><p>Model ba'zan markdown qaytaradi. <strong>Yechim:</strong> JSON-only prompt, ```json tozalash va xavfsiz fallback.</p></div>
+      <div class="card accent-teal reveal"><div class="icon">📷</div><h3>Kamera va o'tishlar</h3><p>Ichkari/tashqari o'tishda kamera chalkashardi. <strong>Yechim:</strong> har joy uchun alohida theta/phi/radius.</p></div>
+      <div class="card accent-red reveal"><div class="icon">📦</div><h3>Og'ir modellar</h3><p>GLB fayllar jami ~490 MB. <strong>Reja:</strong> Draco / Meshopt siqish, LOD va lazy-loading.</p></div>
+      <div class="card accent-pink reveal"><div class="icon">🔐</div><h3>API kalit xavfsizligi</h3><p>Kalit hozir frontendda. <strong>Reja:</strong> serverless proxy (backend) orqali so'rov yuborish.</p></div>
+      <div class="card accent-green reveal"><div class="icon">🌐</div><h3>Brauzer mosligi</h3><p>Web Speech API asosan Chrome/Edge'da. <strong>Yechim:</strong> matnli chat zaxira varianti mavjud.</p></div>
+    </div>
+  </section>
+
+  <!-- 12. ROADMAP -->
+  <section class="slide" aria-label="Kelajak rejalari">
+    <div class="eyebrow reveal">11 · Yo'l xaritasi</div>
+    <h2 class="reveal">Keyingi <span class="grad-text">bosqichlar</span></h2>
+    <div class="roadmap reveal">
+      <div class="milestone"><div class="dot"></div><div class="when">✅ HOZIR</div><h3>MVP</h3><ul><li>3D qishloq</li><li>2 ta AI NPC</li><li>Ovozli suhbat</li><li>AI baholash</li></ul></div>
+      <div class="milestone"><div class="dot"></div><div class="when">BOSQICH 2</div><h3>Kontent</h3><ul><li>Bank, shifoxona, aeroport</li><li>Darajalar (A1 → C1)</li><li>Yangi missiyalar</li></ul></div>
+      <div class="milestone"><div class="dot"></div><div class="when">BOSQICH 3</div><h3>Progress</h3><ul><li>Login va profil</li><li>Ball tarixi, XP</li><li>Talaffuz tahlili</li></ul></div>
+      <div class="milestone"><div class="dot"></div><div class="when">BOSQICH 4</div><h3>Masshtab</h3><ul><li>Backend proxy</li><li>Optimallashgan modellar</li><li>Mobil versiya</li></ul></div>
+    </div>
+  </section>
+
+  <!-- 13. END -->
+  <section class="slide end" aria-label="Rahmat">
+    <div class="eyebrow reveal">Demo vaqti</div>
+    <h1 class="reveal"><span class="grad-text">Rahmat!</span></h1>
+    <p class="reveal" style="margin-top:1rem;font-size:1.3rem">Savollaringiz bo'lsa, marhamat 🙌</p>
+    <div class="reveal"><div class="cmd">$ npm install &amp;&amp; npm run dev</div></div>
+  </section>
+
+</main>
+
+<div class="brand">AI LANGUAGE VILLAGE · CBNU SOFT ENG · GROUP 4</div>
+<nav class="hud" aria-label="Slayd navigatsiyasi">
+  <button id="prevBtn" aria-label="Oldingi slayd">←</button>
+  <span class="counter" id="counter">1 / 13</span>
+  <button id="nextBtn" aria-label="Keyingi slayd">→</button>
+  <button id="fsBtn" aria-label="To'liq ekran">⛶</button>
+</nav>
+
+<script>
+  const slides = [...document.querySelectorAll(".slide")];
+  const counter = document.getElementById("counter");
+  const progress = document.getElementById("progress");
+  let current = 0;
+
+  function animateCounts(slide) {
+    slide.querySelectorAll("[data-count]").forEach((el) => {
+      const target = +el.dataset.count;
+      const start = performance.now();
+      const dur = 1200;
+      const tick = (t) => {
+        const p = Math.min((t - start) / dur, 1);
+        el.textContent = Math.round(target * (1 - Math.pow(1 - p, 3))).toLocaleString("en-US");
+        if (p < 1) requestAnimationFrame(tick);
+      };
+      requestAnimationFrame(tick);
+    });
+  }
+
+  function go(i) {
+    if (i < 0 || i >= slides.length) return;
+    slides.forEach((s, idx) => {
+      s.classList.toggle("active", idx === i);
+      s.classList.toggle("prev", idx < i);
+    });
+    current = i;
+    counter.textContent = `${i + 1} / ${slides.length}`;
+    progress.style.width = `${((i + 1) / slides.length) * 100}%`;
+    history.replaceState(null, "", `#${i + 1}`);
+    animateCounts(slides[i]);
+  }
+
+  function toggleFs() {
+    if (!document.fullscreenElement) document.documentElement.requestFullscreen?.();
+    else document.exitFullscreen?.();
+  }
+
+  document.addEventListener("keydown", (e) => {
+    if (["ArrowRight", "PageDown", " ", "Enter"].includes(e.key)) { e.preventDefault(); go(current + 1); }
+    if (["ArrowLeft", "PageUp", "Backspace"].includes(e.key)) { e.preventDefault(); go(current - 1); }
+    if (e.key === "Home") go(0);
+    if (e.key === "End") go(slides.length - 1);
+    if (e.key.toLowerCase() === "f") toggleFs();
+  });
+  document.getElementById("nextBtn").onclick = () => go(current + 1);
+  document.getElementById("prevBtn").onclick = () => go(current - 1);
+  document.getElementById("fsBtn").onclick = toggleFs;
+
+  let touchX = null;
+  document.addEventListener("touchstart", (e) => (touchX = e.touches[0].clientX));
+  document.addEventListener("touchend", (e) => {
+    if (touchX === null) return;
+    const dx = e.changedTouches[0].clientX - touchX;
+    if (Math.abs(dx) > 50) go(current + (dx < 0 ? 1 : -1));
+    touchX = null;
+  });
+
+  const start = parseInt(location.hash.slice(1), 10);
+  go(Number.isFinite(start) ? Math.min(Math.max(start - 1, 0), slides.length - 1) : 0);
+</script>
+</body>
+</html>
