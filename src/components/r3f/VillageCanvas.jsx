@@ -1,6 +1,7 @@
 import React, { Suspense } from "react";
 import { Canvas } from "@react-three/fiber";
 import { Environment } from "./Environment";
+import { VillageBuildings } from "./VillageBuildings";
 import { Traffic } from "./Traffic";
 import { Shop } from "./Shop";
 import { Cafe } from "./Cafe";
@@ -55,6 +56,7 @@ export function VillageCanvas({
       {/* Suspense: barcha GLTF modellarni xavfsiz yuklash */}
       <Suspense fallback={null}>
         <Environment />
+        {currentLocation === "outside" && <VillageBuildings />}
         <Traffic isOutside={currentLocation === "outside"} />
         <Shop isTalking={isTalking} currentLocation={currentLocation} />
         <Cafe isTalking={isTalking} currentLocation={currentLocation} />

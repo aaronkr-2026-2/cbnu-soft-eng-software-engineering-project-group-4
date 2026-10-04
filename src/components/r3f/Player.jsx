@@ -2,10 +2,18 @@ import React, { useRef, useEffect } from "react";
 import * as THREE from "three";
 import { useGLTF } from "@react-three/drei";
 import { useFrame } from "@react-three/fiber";
+import { VILLAGE_BUILDINGS } from "./villageBuildingsConfig";
 
 const BUILDINGS_CONFIG = [
   { name: "Shop", x: 0, z: -2.5, halfW: 3.8, halfD: 5.5 },
-  { name: "Cafe", x: -12, z: 0, halfW: 4.0, halfD: 3.0 }
+  { name: "Cafe", x: -12, z: 0, halfW: 4.0, halfD: 3.0 },
+  ...VILLAGE_BUILDINGS.map((b) => ({
+    name: b.name,
+    x: b.position[0],
+    z: b.position[2],
+    halfW: b.collision.halfW,
+    halfD: b.collision.halfD
+  }))
 ];
 
 export function Player({
@@ -163,7 +171,7 @@ export function Player({
     }
 
     x = Math.max(-20, Math.min(20, x));
-    z = Math.max(-20, Math.min(20, z));
+    z = Math.max(-20, Math.min(23.5, z));
     return { x, z };
   };
 
