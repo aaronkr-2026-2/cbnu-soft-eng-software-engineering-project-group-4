@@ -44,11 +44,17 @@ export function Cafe({ isTalking = false, currentLocation = "outside" }) {
   }, [baristaGltf]);
 
   useFrame((_, delta) => {
+    if (currentLocation !== "Cafe") return;
     if (mixerRef.current) mixerRef.current.update(delta);
     if (talkActionRef.current) {
-      talkActionRef.current.timeScale = isTalking && currentLocation === "Cafe" ? 1.0 : 0.6;
+      talkActionRef.current.timeScale = isTalking ? 1.0 : 0.6;
     }
   });
+
+  const isInside = currentLocation === "Cafe";
+  const isVisible = currentLocation === "outside" || isInside;
+
+  if (!isVisible) return null;
 
   return (
     <group>
@@ -84,22 +90,25 @@ export function Cafe({ isTalking = false, currentLocation = "outside" }) {
         </mesh>
       </group>
 
-      {/* Kafe interyeri - aniq 7.6m o'lcham va x: -12 pozitsiyada */}
-      <group
-        position={[-12.034, 0, 0.641]}
-        scale={[0.0013007, 0.0013007, 0.0013007]}
-      >
-        <primitive object={cafeGltf.scene} />
-      </group>
+      {/* Kafe interyeri va Barista Mia - faqat Cafe ichida ko'rinadi */}
+      {isInside && (
+        <>
+          <group
+            position={[-12.034, 0, 0.641]}
+            scale={[0.0013007, 0.0013007, 0.0013007]}
+          >
+            <primitive object={cafeGltf.scene} />
+          </group>
 
-      {/* Barista Mia - aniq 1.75m odam bo'yi va to'g'ri burchak */}
-      <group
-        position={[-13.2, 0, -1.75]}
-        rotation={[0, -(25 * Math.PI) / 180, 0]}
-        scale={[0.94678, 0.94678, 0.94678]}
-      >
-        <primitive object={baristaGltf.scene} />
-      </group>
+          <group
+            position={[-13.2, 0, -1.75]}
+            rotation={[0, -(25 * Math.PI) / 180, 0]}
+            scale={[0.94678, 0.94678, 0.94678]}
+          >
+            <primitive object={baristaGltf.scene} />
+          </group>
+        </>
+      )}
     </group>
   );
 }

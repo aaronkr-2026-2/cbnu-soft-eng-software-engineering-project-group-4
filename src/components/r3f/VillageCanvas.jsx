@@ -5,6 +5,17 @@ import { VillageBuildings } from "./VillageBuildings";
 import { Traffic } from "./Traffic";
 import { Shop } from "./Shop";
 import { Cafe } from "./Cafe";
+import { Hotel } from "./Hotel";
+import { Hospital } from "./Hospital";
+import { Bank } from "./Bank";
+import { Library } from "./Library";
+import { PoliceStation } from "./PoliceStation";
+import { LanguageSchool } from "./LanguageSchool";
+import { StudyCenter } from "./StudyCenter";
+import { CommunityCenter } from "./CommunityCenter";
+import { CareerCenter } from "./CareerCenter";
+import { ActivityCenter } from "./ActivityCenter";
+import { MultiPurposeHall } from "./MultiPurposeHall";
 import { Player } from "./Player";
 import { CameraController } from "./CameraController";
 
@@ -21,6 +32,7 @@ export function VillageCanvas({
 }) {
   return (
     <Canvas
+      dpr={[1, 1.5]}
       shadows
       camera={{ fov: 70, position: [0, 5, 10], near: 0.1, far: 1000 }}
       style={{
@@ -55,11 +67,26 @@ export function VillageCanvas({
 
       {/* Suspense: barcha GLTF modellarni xavfsiz yuklash */}
       <Suspense fallback={null}>
-        <Environment />
-        {currentLocation === "outside" && <VillageBuildings />}
-        <Traffic isOutside={currentLocation === "outside"} />
+        {currentLocation === "outside" && (
+          <>
+            <Environment />
+            <VillageBuildings />
+            <Traffic isOutside={true} />
+          </>
+        )}
         <Shop isTalking={isTalking} currentLocation={currentLocation} />
         <Cafe isTalking={isTalking} currentLocation={currentLocation} />
+        <Hotel isTalking={isTalking} currentLocation={currentLocation} />
+        <Hospital isTalking={isTalking} currentLocation={currentLocation} />
+        <Bank isTalking={isTalking} currentLocation={currentLocation} />
+        <Library isTalking={isTalking} currentLocation={currentLocation} />
+        <PoliceStation isTalking={isTalking} currentLocation={currentLocation} />
+        <LanguageSchool isTalking={isTalking} currentLocation={currentLocation} />
+        <StudyCenter isTalking={isTalking} currentLocation={currentLocation} />
+        <CommunityCenter isTalking={isTalking} currentLocation={currentLocation} />
+        <CareerCenter isTalking={isTalking} currentLocation={currentLocation} />
+        <ActivityCenter isTalking={isTalking} currentLocation={currentLocation} />
+        <MultiPurposeHall isTalking={isTalking} currentLocation={currentLocation} />
 
         <Player
           playerRef={playerRef}

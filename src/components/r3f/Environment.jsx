@@ -1,6 +1,63 @@
 import React, { useMemo } from "react";
 import * as THREE from "three";
 import { useGLTF, Clone } from "@react-three/drei";
+import { VillageRoads } from "./VillageRoads";
+import { StreetLights } from "./StreetLights";
+import { ResidentialBoundaries } from "./ResidentialBoundaries";
+
+const VILLAGE_TREES = [
+  // 1. Existing Roadside trees (North grass verge behind north sidewalk)
+  { x: -18.0, z: 13.3, scale: 1.05, rotY: 0.7 },
+  { x: -14.5, z: 13.3, scale: 0.95, rotY: 2.1 },
+  { x: -2.8,  z: 13.4, scale: 1.10, rotY: 4.2 },
+  { x: 0.0,   z: 13.4, scale: 0.90, rotY: 1.5 },
+  { x: 11.0,  z: 13.3, scale: 1.15, rotY: 3.3 },
+  { x: 13.5,  z: 13.3, scale: 1.00, rotY: 5.4 },
+  { x: 18.0,  z: 13.3, scale: 1.08, rotY: 0.3 },
+
+  // 2. Trees around House C / Library (East yard & rear)
+  { x: 26.5,  z: 0.0,  scale: 1.10, rotY: 1.2 },
+  { x: 26.5,  z: 3.0,  scale: 0.95, rotY: 3.8 },
+  { x: 20.0,  z: -6.5, scale: 1.05, rotY: 5.1 },
+  { x: 25.0,  z: -6.0, scale: 1.00, rotY: 2.5 },
+  { x: 15.0,  z: -6.5, scale: 0.90, rotY: 0.9 },
+
+  // 3. Trees around House D / Bank (West yard & rear)
+  { x: -17.0, z: -6.5, scale: 1.00, rotY: 0.4 },
+  { x: -23.0, z: -6.5, scale: 1.15, rotY: 3.6 },
+  { x: -28.0, z: -6.0, scale: 0.95, rotY: 1.9 },
+  { x: -3.0,  z: -16.0, scale: 1.10, rotY: 1.7 },
+  { x: -11.0, z: -16.0, scale: 0.95, rotY: 5.6 },
+
+  // 6. Trees around House B (North-West)
+  { x: -16.5, z: 18.0, scale: 1.10, rotY: 4.8 },
+  { x: -17.0, z: 22.0, scale: 0.90, rotY: 2.2 },
+  { x: -14.5, z: 23.2, scale: 1.05, rotY: 0.5 },
+  { x: -0.8,  z: 18.5, scale: 1.00, rotY: 3.4 },
+  { x: -0.8,  z: 22.0, scale: 1.15, rotY: 5.2 },
+
+  // 7. Trees around House E (North-East) & New North Avenue
+  { x: 17.5,  z: 23.2, scale: 1.05, rotY: 1.1 },
+  { x: 17.0,  z: 18.5, scale: 0.95, rotY: 4.6 },
+  { x: 17.0,  z: 27.5, scale: 1.10, rotY: 2.7 },
+
+  // 8. Open green park area near North Entrance
+  { x: 18.0,  z: 14.5, scale: 1.20, rotY: 3.9 },
+  { x: 22.0,  z: 14.5, scale: 0.90, rotY: 0.8 },
+
+  // 9. Trees around New North Residential Area (neatly framing perimeter and community park)
+  { x: -17.5, z: 35.5, scale: 1.05, rotY: 0.8 },
+  { x: -17.5, z: 41.5, scale: 0.95, rotY: 2.3 },
+  { x: -10.8, z: 45.2, scale: 1.10, rotY: 3.4 },
+  { x: -5.5,  z: 42.5, scale: 1.00, rotY: 4.1 },
+  { x: 0.0,   z: 42.5, scale: 1.15, rotY: 1.6 },
+  { x: 5.5,   z: 42.5, scale: 1.00, rotY: 3.2 },
+  { x: 10.8,  z: 45.2, scale: 1.10, rotY: 1.8 },
+  { x: 17.5,  z: 41.5, scale: 1.05, rotY: 5.0 },
+  { x: 17.5,  z: 35.5, scale: 0.95, rotY: 1.1 },
+  { x: -3.5,  z: 37.0, scale: 1.05, rotY: 2.7 },
+  { x: 2.0,   z: 37.0, scale: 0.95, rotY: 1.2 }
+];
 
 export function Environment() {
   // Daraxt modeli
@@ -47,80 +104,34 @@ export function Environment() {
     return scene;
   }, [tower2Gltf]);
 
-  // Skyscraper 1 (O'ng tomondagi baland bino)
-  const tower1Gltf = useGLTF("/models/skyscraper.glb");
-  const processedTower1 = useMemo(() => {
-    const scene = tower1Gltf.scene.clone(true);
-    scene.traverse((child) => {
-      if (child.isMesh) {
-        child.castShadow = true;
-        child.receiveShadow = true;
-        if (child.material && child.material.map) {
-          child.material.map.colorSpace = THREE.SRGBColorSpace;
-        }
-      }
-    });
-    const box = new THREE.Box3().setFromObject(scene);
-    const size = box.getSize(new THREE.Vector3());
-    const scaleFactor = 16.0 / (size.y || 1);
-    scene.scale.set(scaleFactor, scaleFactor, scaleFactor);
-    const scaledBox = new THREE.Box3().setFromObject(scene);
-    scene.position.set(16, -scaledBox.min.y, 20);
-    return scene;
-  }, [tower1Gltf]);
-
-  const treePositions = useMemo(() => {
-    const xs = [-18, -12, -6, 0, 6, 12, 18];
-    return xs.map((x) => ({ x, z: 13.0, rotY: Math.random() * Math.PI * 2 }));
-  }, []);
-
-  const roadLines = useMemo(() => {
-    const lines = [];
-    for (let x = -22; x <= 22; x += 4.5) {
-      lines.push(x);
-    }
-    return lines;
-  }, []);
-
   return (
     <group>
-      {/* Maysazor zamin */}
-      <mesh rotation={[-Math.PI / 2, 0, 0]} receiveShadow position={[0, 0, 0]}>
-        <planeGeometry args={[60, 60]} />
+      {/* Maysazor zamin (kengaytirilgan shimoliy turar-joy hududi bilan) */}
+      <mesh rotation={[-Math.PI / 2, 0, 0]} receiveShadow position={[0, 0, 12]}>
+        <planeGeometry args={[65, 80]} />
         <meshStandardMaterial color="#55aa55" roughness={0.9} />
       </mesh>
 
-      {/* Asfalt yo'l */}
-      <mesh rotation={[-Math.PI / 2, 0, 0]} receiveShadow position={[0, 0.02, 8]}>
-        <planeGeometry args={[60, 6.5]} />
-        <meshStandardMaterial color="#2e2e2e" roughness={0.85} />
-      </mesh>
+      {/* Qishloq yo'llari, yo'laklar va bordurlar */}
+      <VillageRoads />
 
-      {/* Bordurlar */}
-      <mesh position={[0, 0.08, 4.7]} castShadow receiveShadow>
-        <boxGeometry args={[60, 0.15, 0.25]} />
-        <meshStandardMaterial color="#9e9e9e" />
-      </mesh>
-      <mesh position={[0, 0.08, 11.3]} castShadow receiveShadow>
-        <boxGeometry args={[60, 0.15, 0.25]} />
-        <meshStandardMaterial color="#9e9e9e" />
-      </mesh>
+      {/* Ko'cha chiroqlari */}
+      <StreetLights />
 
-      {/* Oq yo'l chiziqlari */}
-      {roadLines.map((xVal, idx) => (
-        <mesh key={idx} rotation={[-Math.PI / 2, 0, 0]} position={[xVal, 0.03, 8]}>
-          <planeGeometry args={[2.2, 0.25]} />
-          <meshStandardMaterial color="#ffffff" />
-        </mesh>
-      ))}
+      {/* Koreys uslubidagi turar-joy past devorlari va darvoza ustunlari */}
+      <ResidentialBoundaries />
 
-      {/* Baland binolar */}
-      <primitive object={processedTower1} />
+      {/* Baland bino (Kafe orqasida) */}
       <primitive object={processedTower2} />
 
-      {/* Yo'l chetidagi daraxtlar */}
-      {treePositions.map((pos, idx) => (
-        <group key={idx} position={[pos.x, 0, pos.z]} rotation={[0, pos.rotY, 0]}>
+      {/* Qishloq daraxtlari */}
+      {VILLAGE_TREES.map((pos, idx) => (
+        <group
+          key={`village-tree-${idx}`}
+          position={[pos.x, 0, pos.z]}
+          rotation={[0, pos.rotY, 0]}
+          scale={[pos.scale, pos.scale, pos.scale]}
+        >
           <Clone object={processedTree} />
         </group>
       ))}
@@ -130,5 +141,4 @@ export function Environment() {
 
 // Preload models for fast instant load
 useGLTF.preload("/models/tree.glb");
-useGLTF.preload("/models/skyscraper.glb");
 useGLTF.preload("/models/skyscraper2.glb");

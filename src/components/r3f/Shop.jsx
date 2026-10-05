@@ -72,15 +72,21 @@ export function Shop({ isTalking = false, currentLocation = "outside" }) {
   }, [sellerGltf]);
 
   useFrame((_, delta) => {
+    if (currentLocation !== "Shop") return;
     if (mixerRef.current) mixerRef.current.update(delta);
     if (talkActionRef.current) {
-      talkActionRef.current.timeScale = isTalking && currentLocation === "Shop" ? 1.0 : 0.6;
+      talkActionRef.current.timeScale = isTalking ? 1.0 : 0.6;
     }
   });
 
+  const isInside = currentLocation === "Shop";
+  const isVisible = currentLocation === "outside" || isInside;
+
+  if (!isVisible) return null;
+
   return (
     <group>
-      {/* 1. Do'kon interyeri - aniq 12m kenglik */}
+      {/* 1. Do'kon binosi - tashqarida ham, ichkarida ham ko'rinadi */}
       <group
         position={[0, 0, -3.5895]}
         rotation={[0, -Math.PI / 2, 0]}
@@ -89,30 +95,32 @@ export function Shop({ isTalking = false, currentLocation = "outside" }) {
         <primitive object={interiorGltf.scene} />
       </group>
 
-      {/* 2. Do'kon peshtaxtasi */}
-      <group
-        position={[0, 0, -1.2]}
-        rotation={[0, Math.PI, 0]}
-        scale={[0.98375, 0.98375, 0.98375]}
-      >
-        <primitive object={furnitureGltf.scene} />
-      </group>
+      {/* 2. Ichki mebellar va sotuvchi Jack faqat Shop ichida ko'rinadi */}
+      {isInside && (
+        <>
+          <group
+            position={[0, 0, -1.2]}
+            rotation={[0, Math.PI, 0]}
+            scale={[0.98375, 0.98375, 0.98375]}
+          >
+            <primitive object={furnitureGltf.scene} />
+          </group>
 
-      {/* 3. Katta vitrina javoni */}
-      <group
-        position={[0, 0, 3.2]}
-        scale={[0.0012309, 0.0009468, 0.0009468]}
-      >
-        <primitive object={shelfGltf.scene} />
-      </group>
+          <group
+            position={[0, 0, 3.2]}
+            scale={[0.0012309, 0.0009468, 0.0009468]}
+          >
+            <primitive object={shelfGltf.scene} />
+          </group>
 
-      {/* 4. Sotuvchi Jack - aniq 1.75m odam bo'yi */}
-      <group
-        position={[0, 0, -1.85]}
-        scale={[0.0093626, 0.0093626, 0.0093626]}
-      >
-        <primitive object={sellerGltf.scene} />
-      </group>
+          <group
+            position={[0, 0, -1.85]}
+            scale={[0.0093626, 0.0093626, 0.0093626]}
+          >
+            <primitive object={sellerGltf.scene} />
+          </group>
+        </>
+      )}
     </group>
   );
 }
