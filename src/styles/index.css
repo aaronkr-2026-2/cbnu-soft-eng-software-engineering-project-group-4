@@ -1,0 +1,13 @@
+@import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Outfit:wght@400;500;600;700&display=swap');
+@import 'tailwindcss';
+
+@theme { --font-sans: 'Outfit', sans-serif; --font-mono: 'DM Mono', monospace; }
+
+* { box-sizing: border-box; }
+html { background: #0c0d10; font-family: 'Outfit', sans-serif; }
+body { margin: 0; min-width: 320px; }
+button, input { font: inherit; }
+.field { width: 100%; border: 1px solid rgb(255 255 255 / 0.08); border-radius: 0.8rem; background: #0e1015; padding: 0.8rem 0.95rem; color: white; outline: none; }
+.field:focus { border-color: rgb(139 92 246 / 0.8); }
+.primary-button { display: inline-flex; align-items: center; justify-content: center; gap: 0.55rem; border: 0; border-radius: 0.8rem; background: #8b5cf6; padding: 0.78rem 1rem; color: white; font-size: 0.875rem; font-weight: 600; cursor: pointer; transition: background 150ms ease, transform 150ms ease; }
+.primary-button:hover { background: #7c3aed; transform: translateY(-1px); }
