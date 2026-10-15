@@ -13,7 +13,7 @@ export function Shop({ isTalking = false, currentLocation = "outside" }) {
     interiorGltf.scene.rotation.set(0, 0, 0);
     interiorGltf.scene.traverse((c) => {
       if (c.isMesh) {
-        c.castShadow = true;
+        c.castShadow = false;
         c.receiveShadow = true;
       }
     });
@@ -41,7 +41,7 @@ export function Shop({ isTalking = false, currentLocation = "outside" }) {
     shelfGltf.scene.rotation.set(0, 0, 0);
     shelfGltf.scene.traverse((c) => {
       if (c.isMesh) {
-        c.castShadow = true;
+        c.castShadow = false;
         c.receiveShadow = true;
         if (c.material && c.material.map) {
           c.material.map.colorSpace = THREE.SRGBColorSpace;
@@ -59,6 +59,12 @@ export function Shop({ isTalking = false, currentLocation = "outside" }) {
     sellerGltf.scene.scale.set(1, 1, 1);
     sellerGltf.scene.position.set(0, 0, 0);
     sellerGltf.scene.rotation.set(0, 0, 0);
+    sellerGltf.scene.traverse((c) => {
+      if (c.isMesh) {
+        c.castShadow = true;
+        c.receiveShadow = true;
+      }
+    });
 
     if (sellerGltf.animations && sellerGltf.animations.length > 0) {
       const mixer = new THREE.AnimationMixer(sellerGltf.scene);

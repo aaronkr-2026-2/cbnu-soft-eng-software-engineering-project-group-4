@@ -495,6 +495,7 @@ function App() {
   const lastCareerCenterMissionIndexRef = useRef(-1);
   const lastActivityCenterMissionIndexRef = useRef(-1);
   const lastMultiPurposeHallMissionIndexRef = useRef(-1);
+  const isEvaluatingRef = useRef(false);
 
   const messagesHistoryRef = useRef([]);
   const playerRef = useRef(null);
@@ -729,67 +730,97 @@ function App() {
 
   // evaluateOnExit
   const evaluateOnExit = async (doorType) => {
-    const apiKey = import.meta.env.VITE_GROQ_API_KEY;
-
-    const userSpeeches = messagesHistoryRef.current.filter((m) => m.sender === "user");
-
-    if (userSpeeches.length === 0) {
-      setExitEvaluation({
-        doorType,
-        score: 0,
-        completed: false,
-        mistakes: ["Siz ichkarida sotuvchi yoki barista bilan umuman inglizcha gaplashmadingiz."],
-        feedback: "Vazifani bajarish uchun avval 'F' tugmasini bosib, kerakli narsalarni ingliz tilida so'rab ko'ring."
-      });
-      return;
-    }
-
-    setExitEvaluation({ doorType, loading: true });
-
-    const isShop = doorType === "Exit Shop";
-    const isHotel = doorType === "Exit Hotel";
-    const isHospital = doorType === "Exit Hospital";
-    const isBank = doorType === "Exit Bank";
-    const isLibrary = doorType === "Exit Library";
-    const isPolice = doorType === "Exit Police Station";
-    const isLanguageSchool = doorType === "Exit Language School";
-    const isStudyCenter = doorType === "Exit Study Center";
-    const isCommunityCenter = doorType === "Exit Community Center";
-    const isCareerCenter = doorType === "Exit Career Center";
-    const isActivityCenter = doorType === "Exit Activity Center";
-    const isMultiPurposeHall = doorType === "Exit Multi-Purpose Hall";
-    const defaultGoal = isShop
-      ? "Buy exactly 2 bottles of water and 1 apple."
-      : isHotel
-        ? "Book exactly one single room for two nights."
-        : isHospital
-          ? "Make a doctor's appointment and ask what time it is."
-          : isBank
-            ? "Ask about opening a bank account and ask what documents are needed."
-            : isLibrary
-              ? "Ask the librarian where the English learning books are and ask if you can borrow one."
-              : isPolice
-                ? "Report a lost wallet and ask what information you need to provide."
-                : isLanguageSchool
-                  ? "Introduce yourself to the teacher and ask about the English class schedule."
-                  : isStudyCenter
-                    ? "Ask the tutor where you can study English and ask what study materials are available."
-                    : isCommunityCenter
-                      ? "Ask the staff member where you can get a residence certificate and ask what document you need."
-                      : isCareerCenter
-                        ? "Ask the career counselor about finding a part-time job and ask what kind of jobs are available."
-                        : isActivityCenter
-                          ? "Ask the coordinator what community activities are available and ask when the English club meets."
-                          : isMultiPurposeHall
-                            ? "Ask the coordinator what events are held in the hall and ask when the next community meeting is."
-                            : "Order exactly 1 hot Americano and 1 croissant.";
-    const missionGoal = currentMissionRef.current?.goal || defaultGoal;
-
-    const conversationTranscript = messagesHistoryRef.current
-      .map((m) => `${m.sender === "user" ? "Student (Spoken)" : "NPC"}: "${m.text}"`)
-      .join("\n");
+    if (isEvaluatingRef.current) return;
+    isEvaluatingRef.current = true;
 
     try {
+      const apiKey = import.meta.env.VITE_GROQ_API_KEY;
+
+      const isShop = doorType === "Exit Shop";
+      const isHotel = doorType === "Exit Hotel";
+      const isHospital = doorType === "Exit Hospital";
+      const isBank = doorType === "Exit Bank";
+      const isLibrary = doorType === "Exit Library";
+      const isPolice = doorType === "Exit Police Station";
+      const isLanguageSchool = doorType === "Exit Language School";
+      const isStudyCenter = doorType === "Exit Study Center";
+      const isCommunityCenter = doorType === "Exit Community Center";
+      const isCareerCenter = doorType === "Exit Career Center";
+      const isActivityCenter = doorType === "Exit Activity Center";
+      const isMultiPurposeHall = doorType === "Exit Multi-Purpose Hall";
+
+      const npcTitle = isShop
+        ? "sotuvchi Jack"
+        : isHotel
+          ? "administrator Emma"
+          : isHospital
+            ? "qabulxona xodimi Sarah"
+            : isBank
+              ? "bank xodimi David"
+              : isLibrary
+                ? "kutubxonachi Emily"
+                : isPolice
+                  ? "politsiya xodimi Alex"
+                  : isLanguageSchool
+                    ? "o'qituvchi Olivia"
+                    : isStudyCenter
+                      ? "tyutor Daniel"
+                      : isCommunityCenter
+                        ? "markaz xodimi Mina"
+                        : isCareerCenter
+                          ? "maslahatchi James"
+                          : isActivityCenter
+                            ? "koordinator Hana"
+                            : isMultiPurposeHall
+                              ? "koordinator Yuri"
+                              : "barista Mia";
+
+      const userSpeeches = messagesHistoryRef.current.filter((m) => m.sender === "user");
+
+      if (userSpeeches.length === 0) {
+        setExitEvaluation({
+          doorType,
+          score: 0,
+          completed: false,
+          mistakes: [`Siz ichkarida ${npcTitle} bilan umuman inglizcha gaplashmadingiz.`],
+          feedback: "Vazifani bajarish uchun avval 'F' tugmasini bosib, kerakli narsalarni ingliz tilida so'rab ko'ring."
+        });
+        return;
+      }
+
+      setExitEvaluation({ doorType, loading: true });
+
+      const defaultGoal = isShop
+        ? "Buy exactly 2 bottles of water and 1 apple."
+        : isHotel
+          ? "Book exactly one single room for two nights."
+          : isHospital
+            ? "Make a doctor's appointment and ask what time it is."
+            : isBank
+              ? "Ask about opening a bank account and ask what documents are needed."
+              : isLibrary
+                ? "Ask the librarian where the English learning books are and ask if you can borrow one."
+                : isPolice
+                  ? "Report a lost wallet and ask what information you need to provide."
+                  : isLanguageSchool
+                    ? "Introduce yourself to the teacher and ask about the English class schedule."
+                    : isStudyCenter
+                      ? "Ask the tutor where you can study English and ask what study materials are available."
+                      : isCommunityCenter
+                        ? "Ask the staff member where you can get a residence certificate and ask what document you need."
+                        : isCareerCenter
+                          ? "Ask the career counselor about finding a part-time job and ask what kind of jobs are available."
+                          : isActivityCenter
+                            ? "Ask the coordinator what community activities are available and ask when the English club meets."
+                            : isMultiPurposeHall
+                              ? "Ask the coordinator what events are held in the hall and ask when the next community meeting is."
+                              : "Order exactly 1 hot Americano and 1 croissant.";
+      const missionGoal = currentMissionRef.current?.goal || defaultGoal;
+
+      const conversationTranscript = messagesHistoryRef.current
+        .map((m) => `${m.sender === "user" ? "Student (Spoken)" : "NPC"}: "${m.text}"`)
+        .join("\n");
+
       const evaluationSystemPrompt = `You are an English Speaking Examiner evaluating a student's LIVE SPOKEN conversation transcribed via Speech-to-Text (STT).
 
 Location: ${isShop ? "Grocery Store" : isHotel ? "Village Hotel" : isHospital ? "Village Hospital" : isBank ? "Village Bank" : isLibrary ? "Village Library" : isPolice ? "Village Police Station" : isLanguageSchool ? "Village Language School" : isStudyCenter ? "Village Study Center" : isCommunityCenter ? "Village Community Center" : isCareerCenter ? "Village Career Center" : isActivityCenter ? "Village Activity Center" : isMultiPurposeHall ? "Village Multi-Purpose Hall" : "Italian Cafe"}
@@ -868,10 +899,13 @@ JSON Schema:
         mistakes: ["AI tahlilida texnik uzilish bo'ldi. Internetni tekshiring."],
         feedback: "Javobni yuklashda xatolik yuz berdi."
       });
+    } finally {
+      isEvaluatingRef.current = false;
     }
   };
 
   const confirmExitToOutside = (doorType) => {
+    isEvaluatingRef.current = false;
     setExitEvaluation(null);
     messagesHistoryRef.current = [];
     currentMissionRef.current = null;
@@ -1000,7 +1034,7 @@ JSON Schema:
 
   // Eshik bosilganda (E)
   const handleInteractDoor = () => {
-    if (!doorPrompt || dialogState.isOpen) return;
+    if (!doorPrompt || dialogState.isOpen || isEvaluatingRef.current || exitEvaluation) return;
 
     if (doorPrompt === "Shop Door") {
       setCurrentLocation("Shop");

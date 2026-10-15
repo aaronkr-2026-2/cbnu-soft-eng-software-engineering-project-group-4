@@ -16,7 +16,7 @@ export function Cafe({ isTalking = false, currentLocation = "outside" }) {
     cafeGltf.scene.rotation.set(0, 0, 0);
     cafeGltf.scene.traverse((c) => {
       if (c.isMesh) {
-        c.castShadow = true;
+        c.castShadow = false;
         c.receiveShadow = true;
       }
     });
@@ -31,6 +31,12 @@ export function Cafe({ isTalking = false, currentLocation = "outside" }) {
     baristaGltf.scene.scale.set(1, 1, 1);
     baristaGltf.scene.position.set(0, 0, 0);
     baristaGltf.scene.rotation.set(0, 0, 0);
+    baristaGltf.scene.traverse((c) => {
+      if (c.isMesh) {
+        c.castShadow = true;
+        c.receiveShadow = true;
+      }
+    });
 
     if (baristaGltf.animations && baristaGltf.animations.length > 0) {
       const mixer = new THREE.AnimationMixer(baristaGltf.scene);

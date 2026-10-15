@@ -44,8 +44,9 @@ export function VillageCanvas({
         outline: "none"
       }}
     >
-      {/* Osmon foni */}
+      {/* Osmon foni va masofaviy atmosfera tuman */}
       <color attach="background" args={["#87ceeb"]} />
+      <fog attach="fog" args={["#87ceeb", 90, 320]} />
 
       {/* Yorug'lik va toza soya (Shadow acne-siz) */}
       <ambientLight intensity={0.95} />
@@ -67,13 +68,14 @@ export function VillageCanvas({
 
       {/* Suspense: barcha GLTF modellarni xavfsiz yuklash */}
       <Suspense fallback={null}>
-        {currentLocation === "outside" && (
-          <>
-            <Environment />
-            <VillageBuildings />
-            <Traffic isOutside={true} />
-          </>
-        )}
+        {/* Outdoor scene stays mounted and is only hidden indoors, so exiting a
+            building no longer re-clones models, re-creates sign textures, or
+            re-uploads everything to the GPU in a single frame. */}
+        <group visible={currentLocation === "outside"}>
+          <Environment />
+          <VillageBuildings />
+          <Traffic isOutside={currentLocation === "outside"} />
+        </group>
         <Shop isTalking={isTalking} currentLocation={currentLocation} />
         <Cafe isTalking={isTalking} currentLocation={currentLocation} />
         <Hotel isTalking={isTalking} currentLocation={currentLocation} />

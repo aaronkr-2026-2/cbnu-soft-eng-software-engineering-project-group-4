@@ -11,7 +11,8 @@ function SingleCar({ config, baseCarScene, animations, isOutside }) {
     const clone = baseCarScene.clone(true);
     clone.traverse((child) => {
       if (child.isMesh) {
-        child.castShadow = true;
+        // ~497k triangles per car: casting shadows doubled their cost every frame
+        child.castShadow = false;
         child.receiveShadow = true;
       }
     });
