@@ -16,6 +16,37 @@ const BUILDINGS_CONFIG = [
   }))
 ];
 
+// Procedural relaxed standing idle rotations for Mixamo / Renderpeople skeleton
+const IDLE_BONE_ROTATIONS = {
+  // Relaxed arms hanging naturally beside body with gentle elbow bend
+  shoulder_l: [-0.007, 0.818, -0.02, 0.575],
+  upperarm_l: [0.03, 0.479, -0.079, 0.874],
+  lowerarm_l: [0, 0, -0.098, 0.995],
+  hand_l: [-0.726, 0.031, 0.039, 0.685],
+  shoulder_r: [0.815, -0.01, -0.579, 0.001],
+  upperarm_r: [0.029, 0.471, -0.008, 0.882],
+  lowerarm_r: [0, 0, -0.111, 0.994],
+  hand_r: [-0.629, 0.029, 0.036, 0.776],
+
+  // Natural upright spine, neck, and head
+  spine_01: [0, 0, 0, 1],
+  spine_02: [0, 0, 0, 1],
+  spine_03: [0, 0, 0, 1],
+  neck: [0, -0.000029, -0.067279, 0.997734],
+  head: [0, 0.000029, 0.067279, 0.997734],
+
+  // Upright planted standing legs
+  upperleg_l: [0, 0.000057, 0.013626, 0.999907],
+  lowerleg_l: [0.000062, -0.002934, -0.048107, 0.998838],
+  foot_l: [-0.000099, 0.002875, 0.034493, 0.999401],
+  upperleg_r: [-0.000035, 0, 0.999907, -0.013668],
+  lowerleg_r: [0.000096, -0.003558, -0.054287, 0.998519],
+  foot_r: [-0.000143, 0.003521, 0.040634, 0.999168],
+
+  hip: [0, -0.707107, 0, 0.707107],
+  root: [0, 0, 0, 1]
+};
+
 export function Player({
   playerRef,
   cameraAnglesRef,
@@ -34,6 +65,8 @@ export function Player({
 
   const mixerRef = useRef(null);
   const walkActionRef = useRef(null);
+  const idleActionRef = useRef(null);
+  const isWalkingRef = useRef(false);
 
   const gltf = useGLTF("/models/player.glb");
 
@@ -51,12 +84,41 @@ export function Player({
 
     if (gltf.animations && gltf.animations.length > 0) {
       const mixer = new THREE.AnimationMixer(gltf.scene);
-      const walkAction = mixer.clipAction(gltf.animations[0]);
-      walkAction.play();
-      walkAction.paused = true;
-
       mixerRef.current = mixer;
-      walkActionRef.current = walkAction;
+
+      // Look for idle clip in GLTF, or build procedural relaxed standing clip
+      let idleClip = gltf.animations.find(
+        (a) => /idle|stand|wait/i.test(a.name) && a.tracks && a.tracks.length > 0
+      );
+
+      if (!idleClip) {
+        const idleTracks = [];
+        const times = [0, 1];
+        for (const [boneName, q] of Object.entries(IDLE_BONE_ROTATIONS)) {
+          idleTracks.push(
+            new THREE.QuaternionKeyframeTrack(`${boneName}.quaternion`, times, [...q, ...q])
+          );
+        }
+        idleClip = new THREE.AnimationClip("procedural_idle", 1, idleTracks);
+      }
+
+      const idleAction = mixer.clipAction(idleClip);
+      idleAction.setLoop(THREE.LoopRepeat);
+      idleAction.play();
+      idleActionRef.current = idleAction;
+
+      // Look for walk clip (by name or first animation with tracks)
+      const walkClip =
+        gltf.animations.find(
+          (a) => /walk|run/i.test(a.name) && a.tracks && a.tracks.length > 0
+        ) || gltf.animations.find((a) => a.tracks && a.tracks.length > 0) || gltf.animations[0];
+
+      if (walkClip && walkClip.tracks && walkClip.tracks.length > 0) {
+        const walkAction = mixer.clipAction(walkClip);
+        walkAction.setLoop(THREE.LoopRepeat);
+        walkAction.timeScale = 1.25;
+        walkActionRef.current = walkAction;
+      }
     }
   }, [gltf]);
 
@@ -95,11 +157,20 @@ export function Player({
       if (code === "KeyD") keysRef.current.d = false;
     };
 
+    const handleBlur = () => {
+      keysRef.current.w = false;
+      keysRef.current.s = false;
+      keysRef.current.a = false;
+      keysRef.current.d = false;
+    };
+
     window.addEventListener("keydown", handleKeyDown);
     window.addEventListener("keyup", handleKeyUp);
+    window.addEventListener("blur", handleBlur);
     return () => {
       window.removeEventListener("keydown", handleKeyDown);
       window.removeEventListener("keyup", handleKeyUp);
+      window.removeEventListener("blur", handleBlur);
     };
   }, [isDialogOpen, hasModalOpen, onInteractNPC, onInteractDoor]);
 
@@ -496,24 +567,18 @@ export function Player({
     }
 
     const keys = keysRef.current;
-    const isMoving = (keys.w || keys.s || keys.a || keys.d) && !isDialogOpen && !hasModalOpen;
+    const hasInput = (keys.w || keys.s || keys.a || keys.d) && !isDialogOpen && !hasModalOpen;
 
-    if (walkActionRef.current) {
-      walkActionRef.current.paused = !isMoving;
-    }
+    let moveX = 0;
+    let moveZ = 0;
 
-    if (isMoving) {
-      const speed = 0.08 * (delta * 60);
-
+    if (hasInput) {
       const theta = cameraAnglesRef.current.theta;
       const forward = forwardVecRef.current;
       const right = rightVecRef.current;
 
       forward.set(-Math.sin(theta), 0, -Math.cos(theta));
       right.set(Math.cos(theta), 0, -Math.sin(theta));
-
-      let moveX = 0;
-      let moveZ = 0;
 
       if (keys.w) {
         moveX += forward.x;
@@ -531,20 +596,62 @@ export function Player({
         moveX += right.x;
         moveZ += right.z;
       }
+    }
 
-      const len = Math.hypot(moveX, moveZ);
-      if (len > 0) {
-        moveX = (moveX / len) * speed;
-        moveZ = (moveZ / len) * speed;
+    const inputLen = Math.hypot(moveX, moveZ);
+    const isMoving = hasInput && inputLen > 0.001;
+    groupRef.current.userData.isMoving = isMoving;
 
-        groupRef.current.rotation.y = Math.atan2(moveX, moveZ);
-
-        const newX = groupRef.current.position.x + moveX;
-        const newZ = groupRef.current.position.z + moveZ;
-        const safe = checkCollisions(newX, newZ);
-        groupRef.current.position.x = safe.x;
-        groupRef.current.position.z = safe.z;
+    // Handle walk / idle animation transitions smoothly
+    if (isMoving) {
+      if (!isWalkingRef.current) {
+        isWalkingRef.current = true;
+        if (idleActionRef.current) {
+          idleActionRef.current.fadeOut(0.25);
+        }
+        if (walkActionRef.current) {
+          walkActionRef.current.reset();
+          walkActionRef.current.enabled = true;
+          walkActionRef.current.fadeIn(0.25);
+          walkActionRef.current.play();
+        }
       }
+    } else {
+      if (isWalkingRef.current) {
+        isWalkingRef.current = false;
+        if (walkActionRef.current) {
+          walkActionRef.current.fadeOut(0.3);
+        }
+        if (idleActionRef.current) {
+          idleActionRef.current.reset();
+          idleActionRef.current.enabled = true;
+          idleActionRef.current.fadeIn(0.3);
+          idleActionRef.current.play();
+        }
+      }
+    }
+
+    if (isMoving) {
+      const speed = 0.065 * (delta * 60);
+
+      const normX = moveX / inputLen;
+      const normZ = moveZ / inputLen;
+
+      // Smoothly rotate character to face movement direction
+      const targetRotation = Math.atan2(normX, normZ);
+      let diff = targetRotation - groupRef.current.rotation.y;
+      diff = Math.atan2(Math.sin(diff), Math.cos(diff));
+      const turnSpeed = 14;
+      groupRef.current.rotation.y += diff * Math.min(1.0, turnSpeed * delta);
+
+      const deltaX = normX * speed;
+      const deltaZ = normZ * speed;
+
+      const newX = groupRef.current.position.x + deltaX;
+      const newZ = groupRef.current.position.z + deltaZ;
+      const safe = checkCollisions(newX, newZ);
+      groupRef.current.position.x = safe.x;
+      groupRef.current.position.z = safe.z;
     }
 
     // Masofalarni tekshirish (Eshik va NPC)

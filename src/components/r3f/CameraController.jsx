@@ -1,5 +1,87 @@
 import { useEffect, useRef } from "react";
 import { useThree, useFrame } from "@react-three/fiber";
+import { VILLAGE_BUILDINGS } from "./villageBuildingsConfig";
+
+const GTA_OUTDOOR_RADIUS = 3.55;
+const GTA_OUTDOOR_BASE_PHI = 1.415;
+const GTA_MIN_PHI = 0.65;
+const GTA_MAX_PHI = 1.70;
+const GTA_TARGET_Y = 1.35;
+const GTA_MIN_CAMERA_Y = 0.45;
+const GTA_MIN_FOLLOW_RADIUS = 1.2;
+
+const OUTDOOR_BUILDINGS_COLLISION = [
+  { name: "Shop", x: 0, z: -2.5, halfW: 3.8, halfD: 5.5 },
+  { name: "Cafe", x: -12, z: 0, halfW: 4.0, halfD: 3.0 },
+  { name: "Building Behind Cafe", x: -15, z: -10, halfW: 3.5, halfD: 3.5 },
+  ...VILLAGE_BUILDINGS.map((b) => ({
+    name: b.name,
+    x: b.position[0],
+    z: b.position[2],
+    halfW: b.collision.halfW,
+    halfD: b.collision.halfD
+  }))
+];
+
+function checkCameraBuildingCollision(pX, pZ, camX, camZ, maxDist) {
+  const dx = camX - pX;
+  const dz = camZ - pZ;
+  const rayLen = Math.hypot(dx, dz);
+  if (rayLen < 0.001) return maxDist;
+
+  const ux = dx / rayLen;
+  const uz = dz / rayLen;
+  const margin = 0.35;
+
+  let closestDist = maxDist;
+
+  for (let i = 0; i < OUTDOOR_BUILDINGS_COLLISION.length; i++) {
+    const b = OUTDOOR_BUILDINGS_COLLISION[i];
+    const minX = b.x - b.halfW - margin;
+    const maxX = b.x + b.halfW + margin;
+    const minZ = b.z - b.halfD - margin;
+    const maxZ = b.z + b.halfD + margin;
+
+    let tNear = -Infinity;
+    let tFar = Infinity;
+
+    if (Math.abs(ux) > 1e-6) {
+      let t1 = (minX - pX) / ux;
+      let t2 = (maxX - pX) / ux;
+      if (t1 > t2) {
+        const tmp = t1;
+        t1 = t2;
+        t2 = tmp;
+      }
+      if (t1 > tNear) tNear = t1;
+      if (t2 < tFar) tFar = t2;
+      if (tNear > tFar) continue;
+    } else if (pX < minX || pX > maxX) {
+      continue;
+    }
+
+    if (Math.abs(uz) > 1e-6) {
+      let t1 = (minZ - pZ) / uz;
+      let t2 = (maxZ - pZ) / uz;
+      if (t1 > t2) {
+        const tmp = t1;
+        t1 = t2;
+        t2 = tmp;
+      }
+      if (t1 > tNear) tNear = t1;
+      if (t2 < tFar) tFar = t2;
+      if (tNear > tFar) continue;
+    } else if (pZ < minZ || pZ > maxZ) {
+      continue;
+    }
+
+    if (tNear > 0 && tNear < closestDist) {
+      closestDist = tNear;
+    }
+  }
+
+  return closestDist;
+}
 
 export function CameraController({
   playerRef,
@@ -10,10 +92,20 @@ export function CameraController({
   const { camera } = useThree();
   const isDraggingRef = useRef(false);
   const prevMousePosRef = useRef({ x: 0, y: 0 });
+  const currentLocationRef = useRef(currentLocation);
+  const prevPlayerPosRef = useRef({ x: 0, z: 0 });
+  const smoothRadiusRef = useRef(GTA_OUTDOOR_RADIUS);
+  const isInitializedRef = useRef(false);
+
+  useEffect(() => {
+    currentLocationRef.current = currentLocation;
+  }, [currentLocation]);
 
   useEffect(() => {
     const handleMouseDown = (e) => {
       if (isDialogOpen) return;
+      if (e.button !== 0) return;
+      if (e.target && (e.target.tagName === "BUTTON" || e.target.tagName === "INPUT" || e.target.closest("button") || e.target.closest("input"))) return;
       isDraggingRef.current = true;
       prevMousePosRef.current = { x: e.clientX, y: e.clientY };
     };
@@ -22,11 +114,20 @@ export function CameraController({
       if (!isDraggingRef.current || isDialogOpen) return;
       const deltaX = e.clientX - prevMousePosRef.current.x;
       const deltaY = e.clientY - prevMousePosRef.current.y;
-      const angles = cameraAnglesRef.current;
-      angles.theta -= deltaX * 0.005;
-      angles.phi -= deltaY * 0.005;
-      angles.phi = Math.max(0.2, Math.min(Math.PI / 2 - 0.05, angles.phi));
       prevMousePosRef.current = { x: e.clientX, y: e.clientY };
+
+      const angles = cameraAnglesRef.current;
+      if (currentLocationRef.current === "outside") {
+        angles.theta -= deltaX * 0.004;
+        angles.theta = Math.atan2(Math.sin(angles.theta), Math.cos(angles.theta));
+
+        angles.phi += deltaY * 0.004;
+        angles.phi = Math.max(GTA_MIN_PHI, Math.min(GTA_MAX_PHI, angles.phi));
+      } else {
+        angles.theta -= deltaX * 0.005;
+        angles.phi -= deltaY * 0.005;
+        angles.phi = Math.max(0.2, Math.min(Math.PI / 2 - 0.05, angles.phi));
+      }
     };
 
     const handleMouseUp = () => {
@@ -36,18 +137,21 @@ export function CameraController({
     window.addEventListener("mousedown", handleMouseDown);
     window.addEventListener("mousemove", handleMouseMove);
     window.addEventListener("mouseup", handleMouseUp);
+    window.addEventListener("blur", handleMouseUp);
     return () => {
       window.removeEventListener("mousedown", handleMouseDown);
       window.removeEventListener("mousemove", handleMouseMove);
       window.removeEventListener("mouseup", handleMouseUp);
+      window.removeEventListener("blur", handleMouseUp);
     };
   }, [isDialogOpen, cameraAnglesRef]);
 
-  useFrame(() => {
+  useFrame((state, delta) => {
     if (!playerRef.current) return;
 
     const playerPos = playerRef.current.position;
-    const { theta, phi, radius } = cameraAnglesRef.current;
+    const angles = cameraAnglesRef.current;
+    const { theta, phi, radius } = angles;
 
     if (currentLocation !== "outside") {
       let bX = 0;
@@ -231,15 +335,82 @@ export function CameraController({
       camera.position.set(camX, camY, camZ);
       camera.lookAt(bX, targetY, bZ);
     } else {
-      camera.position.x = playerPos.x + 1;
-      camera.position.z = playerPos.z + 1;
-      camera.position.y = 2.8;
+      if (!isInitializedRef.current) {
+        prevPlayerPosRef.current = { x: playerPos.x, z: playerPos.z };
+        if (angles.theta === 0 && playerRef.current.rotation.y === 0) {
+          angles.theta = Math.PI;
+        }
+        isInitializedRef.current = true;
+      }
 
-      camera.lookAt(
-        playerPos.x,
-        1.5,
-        playerPos.z - 3
+      const distMoved = Math.hypot(
+        playerPos.x - prevPlayerPosRef.current.x,
+        playerPos.z - prevPlayerPosRef.current.z
       );
+      const isMoving = Boolean(
+        playerRef.current?.userData?.isMoving ||
+        (delta > 0 && distMoved / delta > 0.15)
+      );
+      prevPlayerPosRef.current = { x: playerPos.x, z: playerPos.z };
+
+      if (!isDraggingRef.current && isMoving) {
+        const playerRotY = playerRef.current.rotation.y;
+        const targetTheta = playerRotY + Math.PI;
+        let diff = targetTheta - angles.theta;
+        diff = Math.atan2(Math.sin(diff), Math.cos(diff));
+
+        if (Math.abs(diff) < 2.4) {
+          const followSpeed = 2.8;
+          const followFactor = 1.0 - Math.exp(-followSpeed * delta);
+          angles.theta += diff * followFactor;
+          angles.theta = Math.atan2(Math.sin(angles.theta), Math.cos(angles.theta));
+        }
+
+        const pitchRestoreSpeed = 1.2;
+        const pitchDiff = GTA_OUTDOOR_BASE_PHI - angles.phi;
+        angles.phi += pitchDiff * (1.0 - Math.exp(-pitchRestoreSpeed * delta));
+      }
+
+      const targetRadius = angles.radius && angles.radius >= 2.5 && angles.radius <= 6.0
+        ? angles.radius
+        : GTA_OUTDOOR_RADIUS;
+
+      const currentPhi = Math.max(
+        GTA_MIN_PHI,
+        Math.min(GTA_MAX_PHI, angles.phi || GTA_OUTDOOR_BASE_PHI)
+      );
+      angles.phi = currentPhi;
+
+      const targetY = GTA_TARGET_Y;
+      const hDist = targetRadius * Math.sin(currentPhi);
+      const desiredCamX = playerPos.x + hDist * Math.sin(angles.theta);
+      const desiredCamZ = playerPos.z + hDist * Math.cos(angles.theta);
+
+      const allowedDist = checkCameraBuildingCollision(
+        playerPos.x,
+        playerPos.z,
+        desiredCamX,
+        desiredCamZ,
+        targetRadius
+      );
+      const effectiveTargetRadius = Math.min(
+        targetRadius,
+        Math.max(GTA_MIN_FOLLOW_RADIUS, allowedDist - 0.2)
+      );
+
+      const rSpeed = effectiveTargetRadius < smoothRadiusRef.current ? 12.0 : 4.0;
+      smoothRadiusRef.current +=
+        (effectiveTargetRadius - smoothRadiusRef.current) * (1.0 - Math.exp(-rSpeed * delta));
+
+      const finalHDist = smoothRadiusRef.current * Math.sin(currentPhi);
+      const camX = playerPos.x + finalHDist * Math.sin(angles.theta);
+      let camY = targetY + smoothRadiusRef.current * Math.cos(currentPhi);
+      const camZ = playerPos.z + finalHDist * Math.cos(angles.theta);
+
+      camY = Math.max(GTA_MIN_CAMERA_Y, camY);
+
+      camera.position.set(camX, camY, camZ);
+      camera.lookAt(playerPos.x, targetY, playerPos.z);
     }
   });
 

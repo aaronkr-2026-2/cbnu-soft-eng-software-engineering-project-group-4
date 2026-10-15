@@ -2,6 +2,9 @@ import React, { useEffect, useRef, useState } from "react";
 import { VillageCanvas } from "./components/r3f/VillageCanvas";
 import { MiniMap } from "./components/ui/MiniMap";
 
+const OUTDOOR_RADIUS = 3.55;
+const OUTDOOR_BASE_PHI = 1.415;
+
 const SHOP_MISSIONS = [
   {
     title: "🏪 Shop Mission",
@@ -496,9 +499,9 @@ function App() {
   const messagesHistoryRef = useRef([]);
   const playerRef = useRef(null);
   const cameraAnglesRef = useRef({
-    theta: 0,
-    phi: Math.PI / 4,
-    radius: 6.0
+    theta: Math.PI,
+    phi: OUTDOOR_BASE_PHI,
+    radius: OUTDOOR_RADIUS
   });
 
   const [dialogState, setDialogState] = useState({
@@ -915,9 +918,9 @@ JSON Schema:
         playerRef.current.position.set(10.8, 0, 38.8);
       }
       playerRef.current.rotation.y = 0;
-      cameraAnglesRef.current.theta = 0;
-      cameraAnglesRef.current.phi = Math.PI / 3.5;
-      cameraAnglesRef.current.radius = 6.0;
+      cameraAnglesRef.current.theta = Math.PI;
+      cameraAnglesRef.current.phi = OUTDOOR_BASE_PHI;
+      cameraAnglesRef.current.radius = OUTDOOR_RADIUS;
     }
   };
 
@@ -989,7 +992,7 @@ JSON Schema:
       try {
         setDialogState((prev) => ({ ...prev, status: "listening" }));
         recognitionRef.current.start();
-      } catch (e) {
+      } catch {
         setDialogState((prev) => ({ ...prev, status: "idle" }));
       }
     }
