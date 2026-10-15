@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { VillageCanvas } from "./components/r3f/VillageCanvas";
 import { MiniMap } from "./components/ui/MiniMap";
+import { ProgressPanelModal } from "./components/ui/ProgressPanelModal";
 import { AuthScreen } from "./components/auth/AuthScreen";
 import { OnboardingScreen } from "./components/onboarding/OnboardingScreen";
 import { subscribeToAuthState, signOutUser, isUserVerified } from "./services/auth";
@@ -555,6 +556,7 @@ function App() {
   const [npcPrompt, setNpcPrompt] = useState(null);
   const [activeMission, setActiveMission] = useState(null);
   const [exitEvaluation, setExitEvaluation] = useState(null);
+  const [isProgressPanelOpen, setIsProgressPanelOpen] = useState(false);
 
   const currentMissionRef = useRef(null);
   const lastShopMissionIndexRef = useRef(-1);
@@ -1697,7 +1699,7 @@ JSON Schema:
         cameraAnglesRef={cameraAnglesRef}
         currentLocation={currentLocation}
         isDialogOpen={dialogState.isOpen}
-        hasModalOpen={Boolean(activeMission || exitEvaluation)}
+        hasModalOpen={Boolean(activeMission || exitEvaluation || isProgressPanelOpen)}
         isTalking={dialogState.status === "speaking"}
         onPromptChange={({ door, npc }) => {
           setDoorPrompt(door);
@@ -1846,7 +1848,25 @@ JSON Schema:
             )}
           </span>
           <button
-            onClick={() => signOutUser()}
+            onClick={() => setIsProgressPanelOpen(true)}
+            style={{
+              background: "rgba(37, 99, 235, 0.25)",
+              border: "1px solid rgba(37, 99, 235, 0.5)",
+              color: "#93c5fd",
+              borderRadius: "6px",
+              padding: "3px 8px",
+              fontSize: "11px",
+              fontWeight: "600",
+              cursor: "pointer"
+            }}
+          >
+            📊 Statistika
+          </button>
+          <button
+            onClick={() => {
+              setIsProgressPanelOpen(false);
+              signOutUser();
+            }}
             style={{
               background: "rgba(239, 68, 68, 0.2)",
               border: "1px solid rgba(239, 68, 68, 0.4)",
@@ -2135,6 +2155,14 @@ JSON Schema:
           </div>
         </div>
       )}
+
+      {/* Shaxsiy natijalar modali (User Progress Panel) */}
+      <ProgressPanelModal
+        open={isProgressPanelOpen}
+        onClose={() => setIsProgressPanelOpen(false)}
+        authUser={authUser}
+        userProfile={userProfile}
+      />
 
       {/* Chat oynasi */}
       {dialogState.isOpen && (

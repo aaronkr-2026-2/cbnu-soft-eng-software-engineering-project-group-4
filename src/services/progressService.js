@@ -1,5 +1,10 @@
 import {
   doc,
+  collection,
+  query,
+  orderBy,
+  limit,
+  getDocs,
   runTransaction,
   serverTimestamp
 } from "firebase/firestore";
@@ -172,6 +177,8 @@ export async function recordMissionProgress(uid, mission, evaluation, attemptId)
         lastFacility: facility
       };
 
+      const clientCompletedAt = completed ? new Date() : (prevStats.lastCompletedAt || null);
+
       if (completed) {
         updatedStats.lastCompletedAt = serverTimestamp();
       }
@@ -244,7 +251,8 @@ export async function recordMissionProgress(uid, mission, evaluation, attemptId)
           completedMissions: newCompleted,
           totalAttempts: newAttempts,
           averageScore: newAverageScore,
-          lastFacility: facility
+          lastFacility: facility,
+          ...(clientCompletedAt ? { lastCompletedAt: clientCompletedAt } : {})
         }
       };
     });
@@ -253,6 +261,40 @@ export async function recordMissionProgress(uid, mission, evaluation, attemptId)
   } catch (err) {
     err.friendlyMessage = formatFirestoreError(err);
     console.error("Failed to record mission progress:", err.code || err.message);
+    throw err;
+  }
+}
+
+/**
+ * Safely retrieves the most recent mission history records for an authenticated user.
+ *
+ * @param {string} uid - Firebase Authentication UID.
+ * @param {number} [maxRecords=5] - Number of records to return (capped between 1 and 20, defaults to 5).
+ * @returns {Promise<Array<object>>} List of mission records with document IDs, ordered by timestamp descending.
+ */
+export async function getRecentMissionHistory(uid, maxRecords = 5) {
+  if (!uid || typeof uid !== "string" || !uid.trim()) {
+    const err = new Error("Invalid or missing user UID for mission history lookup.");
+    err.code = "invalid-uid";
+    err.friendlyMessage = "User identifier is required to view mission history.";
+    throw err;
+  }
+
+  const cleanUid = uid.trim();
+  const safeLimit = Math.max(1, Math.min(20, Number.isFinite(maxRecords) ? Math.floor(maxRecords) : 5));
+
+  try {
+    const historyColRef = collection(db, "users", cleanUid, "missionHistory");
+    const q = query(historyColRef, orderBy("timestamp", "desc"), limit(safeLimit));
+    const snap = await getDocs(q);
+
+    return snap.docs.map((d) => ({
+      id: d.id,
+      ...d.data()
+    }));
+  } catch (err) {
+    err.friendlyMessage = formatFirestoreError(err);
+    console.error("Failed to fetch mission history:", err.code || err.message);
     throw err;
   }
 }
