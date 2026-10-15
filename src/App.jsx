@@ -1,6 +1,11 @@
 import React, { useEffect, useRef, useState } from "react";
 import { VillageCanvas } from "./components/r3f/VillageCanvas";
 import { MiniMap } from "./components/ui/MiniMap";
+import { AuthScreen } from "./components/auth/AuthScreen";
+import { OnboardingScreen } from "./components/onboarding/OnboardingScreen";
+import { subscribeToAuthState, signOutUser, isUserVerified } from "./services/auth";
+import { createUserProfileIfMissing } from "./services/userService";
+import { recordMissionProgress, deriveFacilityName, calculateMissionXP } from "./services/progressService";
 
 const OUTDOOR_RADIUS = 3.55;
 const OUTDOOR_BASE_PHI = 1.415;
@@ -475,6 +480,76 @@ const getBestEnglishVoice = (voices, npcName) => {
 };
 
 function App() {
+  const [authUser, setAuthUser] = useState(null);
+  const [authLoading, setAuthLoading] = useState(true);
+  const [userProfile, setUserProfile] = useState(null);
+  const [profileLoading, setProfileLoading] = useState(false);
+  const [profileError, setProfileError] = useState(null);
+
+  const fetchProfileForUser = async (user) => {
+    if (!user || !isUserVerified(user)) {
+      setUserProfile(null);
+      setProfileLoading(false);
+      setProfileError(null);
+      return;
+    }
+
+    setProfileLoading(true);
+    setProfileError(null);
+
+    try {
+      const profile = await createUserProfileIfMissing(user);
+      setUserProfile(profile);
+    } catch (err) {
+      console.error("Failed to load user profile:", err);
+      setProfileError(err.friendlyMessage || "Failed to load user profile from database.");
+    } finally {
+      setProfileLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    let isCancelled = false;
+
+    const unsubscribe = subscribeToAuthState(async (user) => {
+      setAuthUser(user);
+      setAuthLoading(false);
+
+      if (!user || !isUserVerified(user)) {
+        if (!isCancelled) {
+          setUserProfile(null);
+          setProfileLoading(false);
+          setProfileError(null);
+        }
+        return;
+      }
+
+      if (!isCancelled) {
+        setProfileLoading(true);
+        setProfileError(null);
+      }
+
+      try {
+        const profile = await createUserProfileIfMissing(user);
+        if (!isCancelled) {
+          setUserProfile(profile);
+          setProfileLoading(false);
+        }
+      } catch (err) {
+        console.error("Failed to load user profile:", err);
+        if (!isCancelled) {
+          setProfileError(err.friendlyMessage || "Failed to load user profile from database.");
+          setProfileLoading(false);
+        }
+      }
+    });
+
+    return () => {
+      isCancelled = true;
+      unsubscribe();
+    };
+  }, []);
+
   const [currentLocation, setCurrentLocation] = useState("outside");
   const [doorPrompt, setDoorPrompt] = useState(null);
   const [npcPrompt, setNpcPrompt] = useState(null);
@@ -496,6 +571,38 @@ function App() {
   const lastActivityCenterMissionIndexRef = useRef(-1);
   const lastMultiPurposeHallMissionIndexRef = useRef(-1);
   const isEvaluatingRef = useRef(false);
+  const currentAttemptIdRef = useRef(null);
+  const isSavingProgressRef = useRef(false);
+  const failedAttemptRef = useRef(null);
+  const isMountedRef = useRef(true);
+  const saveBannerTimeoutRef = useRef(null);
+
+  const [isSavingProgress, setIsSavingProgress] = useState(false);
+  const [isRetryingSave, setIsRetryingSave] = useState(false);
+  const [saveErrorBanner, setSaveErrorBanner] = useState(null);
+
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+      if (saveBannerTimeoutRef.current) {
+        clearTimeout(saveBannerTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  const generateAttemptId = () => {
+    if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+      return crypto.randomUUID();
+    }
+    return `attempt_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+  };
+
+  const startNewMissionAttempt = (mission) => {
+    currentAttemptIdRef.current = generateAttemptId();
+    currentMissionRef.current = mission;
+    setActiveMission(mission);
+  };
 
   const messagesHistoryRef = useRef([]);
   const playerRef = useRef(null);
@@ -904,57 +1011,220 @@ JSON Schema:
     }
   };
 
-  const confirmExitToOutside = (doorType) => {
+  const teleportPlayerOutside = (doorType) => {
+    if (!playerRef.current) return;
+
+    if (doorType === "Exit Shop") {
+      setCurrentLocation("outside");
+      playerRef.current.position.set(0, 0, 5.0);
+    } else if (doorType === "Exit Cafe") {
+      setCurrentLocation("outside");
+      playerRef.current.position.set(-12, 0, 5.0);
+    } else if (doorType === "Exit Hotel") {
+      setCurrentLocation("outside");
+      playerRef.current.position.set(9.5, 0, 3.8);
+    } else if (doorType === "Exit Hospital") {
+      setCurrentLocation("outside");
+      playerRef.current.position.set(-8.0, 0, 13.0);
+    } else if (doorType === "Exit Bank") {
+      setCurrentLocation("outside");
+      playerRef.current.position.set(-23.0, 0, 3.8);
+    } else if (doorType === "Exit Library") {
+      setCurrentLocation("outside");
+      playerRef.current.position.set(19.8, 0, 3.8);
+    } else if (doorType === "Exit Police Station") {
+      setCurrentLocation("outside");
+      playerRef.current.position.set(5.0, 0, 13.0);
+    } else if (doorType === "Exit Language School") {
+      setCurrentLocation("outside");
+      playerRef.current.position.set(-14.4, 0, 32.5);
+    } else if (doorType === "Exit Study Center") {
+      setCurrentLocation("outside");
+      playerRef.current.position.set(-7.5, 0, 32.5);
+    } else if (doorType === "Exit Community Center") {
+      setCurrentLocation("outside");
+      playerRef.current.position.set(7.2, 0, 32.5);
+    } else if (doorType === "Exit Career Center") {
+      setCurrentLocation("outside");
+      playerRef.current.position.set(14.4, 0, 32.5);
+    } else if (doorType === "Exit Activity Center") {
+      setCurrentLocation("outside");
+      playerRef.current.position.set(-10.8, 0, 38.8);
+    } else if (doorType === "Exit Multi-Purpose Hall") {
+      setCurrentLocation("outside");
+      playerRef.current.position.set(10.8, 0, 38.8);
+    }
+    playerRef.current.rotation.y = 0;
+    cameraAnglesRef.current.theta = Math.PI;
+    cameraAnglesRef.current.phi = OUTDOOR_BASE_PHI;
+    cameraAnglesRef.current.radius = OUTDOOR_RADIUS;
+  };
+
+  const formatSaveSuccessMessage = (result) => {
+    if (result?.alreadyRecorded) {
+      return "Bu urinish avval saqlangan. Qayta XP berilmadi.";
+    }
+    const xpEarned = typeof result?.xpEarned === "number" ? result.xpEarned : 0;
+    const totalXP = typeof result?.stats?.totalXP === "number" ? result.stats.totalXP : 0;
+
+    if (xpEarned > 0) {
+      return `🎉 +${xpEarned} XP qo‘shildi! Jami: ${totalXP} XP`;
+    }
+    return "📋 Vazifa natijasi saqlandi (+0 XP). To‘liq bajarish uchun qaytadan urinib ko‘ring!";
+  };
+
+  const confirmExitToOutside = async (doorType) => {
+    if (isSavingProgressRef.current) return;
+    isSavingProgressRef.current = true;
+    if (isMountedRef.current) {
+      setIsSavingProgress(true);
+    }
     isEvaluatingRef.current = false;
-    setExitEvaluation(null);
+
+    const uid = authUser?.uid;
+    const attemptId = currentAttemptIdRef.current || generateAttemptId();
+    currentAttemptIdRef.current = attemptId;
+
+    const missionData = currentMissionRef.current || {
+      title: `${deriveFacilityName(doorType)} Mission`,
+      goal: ""
+    };
+
+    const evaluationData = exitEvaluation
+      ? {
+          doorType: exitEvaluation.doorType || doorType,
+          score: typeof exitEvaluation.score === "number" ? exitEvaluation.score : 0,
+          completed: Boolean(exitEvaluation.completed),
+          mistakes: Array.isArray(exitEvaluation.mistakes) ? exitEvaluation.mistakes : [],
+          feedback: typeof exitEvaluation.feedback === "string" ? exitEvaluation.feedback : ""
+        }
+      : null;
+
+    if (uid && evaluationData) {
+      try {
+        const result = await recordMissionProgress(uid, missionData, evaluationData, attemptId);
+        failedAttemptRef.current = null;
+        if (isMountedRef.current) {
+          if (result?.stats) {
+            setUserProfile((prev) => {
+              if (!prev) return prev;
+              return {
+                ...prev,
+                stats: {
+                  ...(prev.stats || {}),
+                  ...result.stats
+                }
+              };
+            });
+          }
+
+          setSaveErrorBanner({
+            success: true,
+            canRetry: false,
+            message: formatSaveSuccessMessage(result)
+          });
+
+          if (saveBannerTimeoutRef.current) {
+            clearTimeout(saveBannerTimeoutRef.current);
+          }
+          saveBannerTimeoutRef.current = setTimeout(() => {
+            if (isMountedRef.current) {
+              setSaveErrorBanner(null);
+            }
+          }, 4000);
+        }
+      } catch (err) {
+        console.error("Failed to persist mission progress:", err);
+        failedAttemptRef.current = {
+          uid,
+          mission: missionData,
+          evaluation: evaluationData,
+          attemptId
+        };
+        if (isMountedRef.current) {
+          if (saveBannerTimeoutRef.current) {
+            clearTimeout(saveBannerTimeoutRef.current);
+          }
+          setSaveErrorBanner({
+            success: false,
+            canRetry: true,
+            message: err?.friendlyMessage || "Vazifa natijasini saqlashda xatolik yuz berdi."
+          });
+        }
+      }
+    }
+
+    if (isMountedRef.current) {
+      setIsSavingProgress(false);
+      setExitEvaluation(null);
+      setActiveMission(null);
+    }
+    isSavingProgressRef.current = false;
+
     messagesHistoryRef.current = [];
     currentMissionRef.current = null;
+    currentAttemptIdRef.current = null;
 
-    if (playerRef.current) {
-      if (doorType === "Exit Shop") {
-        setCurrentLocation("outside");
-        playerRef.current.position.set(0, 0, 5.0);
-      } else if (doorType === "Exit Cafe") {
-        setCurrentLocation("outside");
-        playerRef.current.position.set(-12, 0, 5.0);
-      } else if (doorType === "Exit Hotel") {
-        setCurrentLocation("outside");
-        playerRef.current.position.set(9.5, 0, 3.8);
-      } else if (doorType === "Exit Hospital") {
-        setCurrentLocation("outside");
-        playerRef.current.position.set(-8.0, 0, 13.0);
-      } else if (doorType === "Exit Bank") {
-        setCurrentLocation("outside");
-        playerRef.current.position.set(-23.0, 0, 3.8);
-      } else if (doorType === "Exit Library") {
-        setCurrentLocation("outside");
-        playerRef.current.position.set(19.8, 0, 3.8);
-      } else if (doorType === "Exit Police Station") {
-        setCurrentLocation("outside");
-        playerRef.current.position.set(5.0, 0, 13.0);
-      } else if (doorType === "Exit Language School") {
-        setCurrentLocation("outside");
-        playerRef.current.position.set(-14.4, 0, 32.5);
-      } else if (doorType === "Exit Study Center") {
-        setCurrentLocation("outside");
-        playerRef.current.position.set(-7.5, 0, 32.5);
-      } else if (doorType === "Exit Community Center") {
-        setCurrentLocation("outside");
-        playerRef.current.position.set(7.2, 0, 32.5);
-      } else if (doorType === "Exit Career Center") {
-        setCurrentLocation("outside");
-        playerRef.current.position.set(14.4, 0, 32.5);
-      } else if (doorType === "Exit Activity Center") {
-        setCurrentLocation("outside");
-        playerRef.current.position.set(-10.8, 0, 38.8);
-      } else if (doorType === "Exit Multi-Purpose Hall") {
-        setCurrentLocation("outside");
-        playerRef.current.position.set(10.8, 0, 38.8);
+    teleportPlayerOutside(doorType);
+  };
+
+  const handleRetrySaveProgress = async () => {
+    if (isSavingProgressRef.current || !failedAttemptRef.current) return;
+    const { uid, mission, evaluation, attemptId } = failedAttemptRef.current;
+    if (!uid || !evaluation || !attemptId) return;
+
+    isSavingProgressRef.current = true;
+    if (isMountedRef.current) {
+      setIsRetryingSave(true);
+    }
+
+    try {
+      const result = await recordMissionProgress(uid, mission, evaluation, attemptId);
+      failedAttemptRef.current = null;
+      if (isMountedRef.current) {
+        if (result?.stats) {
+          setUserProfile((prev) => {
+            if (!prev) return prev;
+            return {
+              ...prev,
+              stats: {
+                ...(prev.stats || {}),
+                ...result.stats
+              }
+            };
+          });
+        }
+        setSaveErrorBanner({
+          success: true,
+          canRetry: false,
+          message: formatSaveSuccessMessage(result)
+        });
+        if (saveBannerTimeoutRef.current) {
+          clearTimeout(saveBannerTimeoutRef.current);
+        }
+        saveBannerTimeoutRef.current = setTimeout(() => {
+          if (isMountedRef.current) {
+            setSaveErrorBanner(null);
+          }
+        }, 4000);
       }
-      playerRef.current.rotation.y = 0;
-      cameraAnglesRef.current.theta = Math.PI;
-      cameraAnglesRef.current.phi = OUTDOOR_BASE_PHI;
-      cameraAnglesRef.current.radius = OUTDOOR_RADIUS;
+    } catch (err) {
+      console.error("Retry mission progress save failed:", err);
+      if (isMountedRef.current) {
+        if (saveBannerTimeoutRef.current) {
+          clearTimeout(saveBannerTimeoutRef.current);
+        }
+        setSaveErrorBanner({
+          success: false,
+          canRetry: true,
+          message: err?.friendlyMessage || "Natijani saqlashda yana xatolik yuz berdi."
+        });
+      }
+    } finally {
+      isSavingProgressRef.current = false;
+      if (isMountedRef.current) {
+        setIsRetryingSave(false);
+      }
     }
   };
 
@@ -1047,9 +1317,7 @@ JSON Schema:
       cameraAnglesRef.current.radius = 2.0;
 
       messagesHistoryRef.current = [];
-      const mission = getRandomMission(SHOP_MISSIONS, lastShopMissionIndexRef);
-      currentMissionRef.current = mission;
-      setActiveMission(mission);
+      startNewMissionAttempt(getRandomMission(SHOP_MISSIONS, lastShopMissionIndexRef));
     } else if (doorPrompt === "Cafe Door") {
       setCurrentLocation("Cafe");
       if (playerRef.current) {
@@ -1061,9 +1329,7 @@ JSON Schema:
       cameraAnglesRef.current.radius = 2.0;
 
       messagesHistoryRef.current = [];
-      const mission = getRandomMission(CAFE_MISSIONS, lastCafeMissionIndexRef);
-      currentMissionRef.current = mission;
-      setActiveMission(mission);
+      startNewMissionAttempt(getRandomMission(CAFE_MISSIONS, lastCafeMissionIndexRef));
     } else if (doorPrompt === "Hotel Door") {
       setCurrentLocation("Hotel");
       if (playerRef.current) {
@@ -1075,9 +1341,7 @@ JSON Schema:
       cameraAnglesRef.current.radius = 2.0;
 
       messagesHistoryRef.current = [];
-      const mission = getRandomMission(HOTEL_MISSIONS, lastHotelMissionIndexRef);
-      currentMissionRef.current = mission;
-      setActiveMission(mission);
+      startNewMissionAttempt(getRandomMission(HOTEL_MISSIONS, lastHotelMissionIndexRef));
     } else if (doorPrompt === "Hospital Door") {
       setCurrentLocation("Hospital");
       if (playerRef.current) {
@@ -1089,9 +1353,7 @@ JSON Schema:
       cameraAnglesRef.current.radius = 2.0;
 
       messagesHistoryRef.current = [];
-      const mission = getRandomMission(HOSPITAL_MISSIONS, lastHospitalMissionIndexRef);
-      currentMissionRef.current = mission;
-      setActiveMission(mission);
+      startNewMissionAttempt(getRandomMission(HOSPITAL_MISSIONS, lastHospitalMissionIndexRef));
     } else if (doorPrompt === "Bank Door") {
       setCurrentLocation("Bank");
       if (playerRef.current) {
@@ -1103,9 +1365,7 @@ JSON Schema:
       cameraAnglesRef.current.radius = 2.0;
 
       messagesHistoryRef.current = [];
-      const mission = getRandomMission(BANK_MISSIONS, lastBankMissionIndexRef);
-      currentMissionRef.current = mission;
-      setActiveMission(mission);
+      startNewMissionAttempt(getRandomMission(BANK_MISSIONS, lastBankMissionIndexRef));
     } else if (doorPrompt === "Library Door") {
       setCurrentLocation("Library");
       if (playerRef.current) {
@@ -1117,9 +1377,7 @@ JSON Schema:
       cameraAnglesRef.current.radius = 2.0;
 
       messagesHistoryRef.current = [];
-      const mission = getRandomMission(LIBRARY_MISSIONS, lastLibraryMissionIndexRef);
-      currentMissionRef.current = mission;
-      setActiveMission(mission);
+      startNewMissionAttempt(getRandomMission(LIBRARY_MISSIONS, lastLibraryMissionIndexRef));
     } else if (doorPrompt === "Police Station Door") {
       setCurrentLocation("PoliceStation");
       if (playerRef.current) {
@@ -1131,9 +1389,7 @@ JSON Schema:
       cameraAnglesRef.current.radius = 2.0;
 
       messagesHistoryRef.current = [];
-      const mission = getRandomMission(POLICE_MISSIONS, lastPoliceMissionIndexRef);
-      currentMissionRef.current = mission;
-      setActiveMission(mission);
+      startNewMissionAttempt(getRandomMission(POLICE_MISSIONS, lastPoliceMissionIndexRef));
     } else if (doorPrompt === "Language School Door") {
       setCurrentLocation("LanguageSchool");
       if (playerRef.current) {
@@ -1145,9 +1401,7 @@ JSON Schema:
       cameraAnglesRef.current.radius = 2.0;
 
       messagesHistoryRef.current = [];
-      const mission = getRandomMission(LANGUAGE_SCHOOL_MISSIONS, lastLanguageSchoolMissionIndexRef);
-      currentMissionRef.current = mission;
-      setActiveMission(mission);
+      startNewMissionAttempt(getRandomMission(LANGUAGE_SCHOOL_MISSIONS, lastLanguageSchoolMissionIndexRef));
     } else if (doorPrompt === "Study Center Door") {
       setCurrentLocation("StudyCenter");
       if (playerRef.current) {
@@ -1159,9 +1413,7 @@ JSON Schema:
       cameraAnglesRef.current.radius = 2.0;
 
       messagesHistoryRef.current = [];
-      const mission = getRandomMission(STUDY_CENTER_MISSIONS, lastStudyCenterMissionIndexRef);
-      currentMissionRef.current = mission;
-      setActiveMission(mission);
+      startNewMissionAttempt(getRandomMission(STUDY_CENTER_MISSIONS, lastStudyCenterMissionIndexRef));
     } else if (doorPrompt === "Community Center Door") {
       setCurrentLocation("CommunityCenter");
       if (playerRef.current) {
@@ -1173,9 +1425,7 @@ JSON Schema:
       cameraAnglesRef.current.radius = 2.0;
 
       messagesHistoryRef.current = [];
-      const mission = getRandomMission(COMMUNITY_CENTER_MISSIONS, lastCommunityCenterMissionIndexRef);
-      currentMissionRef.current = mission;
-      setActiveMission(mission);
+      startNewMissionAttempt(getRandomMission(COMMUNITY_CENTER_MISSIONS, lastCommunityCenterMissionIndexRef));
     } else if (doorPrompt === "Career Center Door") {
       setCurrentLocation("CareerCenter");
       if (playerRef.current) {
@@ -1187,9 +1437,7 @@ JSON Schema:
       cameraAnglesRef.current.radius = 2.0;
 
       messagesHistoryRef.current = [];
-      const mission = getRandomMission(CAREER_CENTER_MISSIONS, lastCareerCenterMissionIndexRef);
-      currentMissionRef.current = mission;
-      setActiveMission(mission);
+      startNewMissionAttempt(getRandomMission(CAREER_CENTER_MISSIONS, lastCareerCenterMissionIndexRef));
     } else if (doorPrompt === "Activity Center Door") {
       setCurrentLocation("ActivityCenter");
       if (playerRef.current) {
@@ -1201,9 +1449,7 @@ JSON Schema:
       cameraAnglesRef.current.radius = 2.0;
 
       messagesHistoryRef.current = [];
-      const mission = getRandomMission(ACTIVITY_CENTER_MISSIONS, lastActivityCenterMissionIndexRef);
-      currentMissionRef.current = mission;
-      setActiveMission(mission);
+      startNewMissionAttempt(getRandomMission(ACTIVITY_CENTER_MISSIONS, lastActivityCenterMissionIndexRef));
     } else if (doorPrompt === "Multi-Purpose Hall Door") {
       setCurrentLocation("MultiPurposeHall");
       if (playerRef.current) {
@@ -1215,9 +1461,7 @@ JSON Schema:
       cameraAnglesRef.current.radius = 2.0;
 
       messagesHistoryRef.current = [];
-      const mission = getRandomMission(MULTI_PURPOSE_HALL_MISSIONS, lastMultiPurposeHallMissionIndexRef);
-      currentMissionRef.current = mission;
-      setActiveMission(mission);
+      startNewMissionAttempt(getRandomMission(MULTI_PURPOSE_HALL_MISSIONS, lastMultiPurposeHallMissionIndexRef));
     } else if (
       doorPrompt === "Exit Shop" ||
       doorPrompt === "Exit Cafe" ||
@@ -1292,6 +1536,159 @@ JSON Schema:
     }
   };
 
+  if (authLoading) {
+    return (
+      <div
+        style={{
+          width: "100vw",
+          height: "100vh",
+          display: "flex",
+          flexDirection: "column",
+          justifyContent: "center",
+          alignItems: "center",
+          background: "radial-gradient(ellipse at 50% 25%, #1e293b 0%, #0f172a 65%, #020617 100%)",
+          color: "#fff",
+          fontFamily: "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif"
+        }}
+      >
+        <div style={{ fontSize: "40px", marginBottom: "14px" }}>🏡</div>
+        <div style={{ fontSize: "18px", fontWeight: "600", letterSpacing: "-0.01em" }}>
+          Entering AI Language Village...
+        </div>
+      </div>
+    );
+  }
+
+  if (!authUser || !isUserVerified(authUser)) {
+    return (
+      <AuthScreen
+        user={authUser}
+        onAuthSuccess={(u) => {
+          setAuthUser(u);
+          fetchProfileForUser(u);
+        }}
+        onSignOut={() => {
+          setAuthUser(null);
+          setUserProfile(null);
+        }}
+      />
+    );
+  }
+
+  if (profileLoading) {
+    return (
+      <div
+        style={{
+          width: "100vw",
+          height: "100vh",
+          display: "flex",
+          flexDirection: "column",
+          justifyContent: "center",
+          alignItems: "center",
+          background: "radial-gradient(ellipse at 50% 25%, #1e293b 0%, #0f172a 65%, #020617 100%)",
+          color: "#fff",
+          fontFamily: "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif"
+        }}
+      >
+        <div style={{ fontSize: "40px", marginBottom: "14px" }}>📚</div>
+        <div style={{ fontSize: "18px", fontWeight: "600", letterSpacing: "-0.01em" }}>
+          Loading your learning profile...
+        </div>
+      </div>
+    );
+  }
+
+  if (profileError) {
+    return (
+      <div
+        style={{
+          width: "100vw",
+          height: "100vh",
+          display: "flex",
+          flexDirection: "column",
+          justifyContent: "center",
+          alignItems: "center",
+          background: "radial-gradient(ellipse at 50% 25%, #1e293b 0%, #0f172a 65%, #020617 100%)",
+          color: "#fff",
+          padding: "20px",
+          fontFamily: "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif"
+        }}
+      >
+        <div
+          style={{
+            maxWidth: "420px",
+            background: "rgba(30, 30, 38, 0.9)",
+            border: "1px solid rgba(239, 68, 68, 0.35)",
+            borderRadius: "18px",
+            padding: "28px",
+            textAlign: "center"
+          }}
+        >
+          <div style={{ fontSize: "36px", marginBottom: "12px" }}>⚠️</div>
+          <h2 style={{ fontSize: "18px", margin: "0 0 10px 0", color: "#fca5a5" }}>
+            Profile Connection Issue
+          </h2>
+          <p style={{ fontSize: "13px", color: "#94a3b8", lineHeight: 1.4, margin: "0 0 20px 0" }}>
+            {profileError}
+          </p>
+          <div style={{ display: "flex", gap: "10px" }}>
+            <button
+              onClick={() => fetchProfileForUser(authUser)}
+              style={{
+                flex: 1,
+                padding: "10px",
+                borderRadius: "10px",
+                border: "none",
+                background: "#2563eb",
+                color: "#fff",
+                fontWeight: "600",
+                fontSize: "14px",
+                cursor: "pointer"
+              }}
+            >
+              Retry
+            </button>
+            <button
+              onClick={() => {
+                signOutUser();
+                setAuthUser(null);
+                setUserProfile(null);
+              }}
+              style={{
+                flex: 1,
+                padding: "10px",
+                borderRadius: "10px",
+                border: "1px solid rgba(255, 255, 255, 0.15)",
+                background: "rgba(255, 255, 255, 0.05)",
+                color: "#cbd5e1",
+                fontWeight: "500",
+                fontSize: "14px",
+                cursor: "pointer"
+              }}
+            >
+              Log Out
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (!userProfile || !userProfile.onboardingCompleted) {
+    return (
+      <OnboardingScreen
+        user={authUser}
+        profile={userProfile}
+        onComplete={(updated) => setUserProfile(updated)}
+        onSignOut={() => {
+          signOutUser();
+          setAuthUser(null);
+          setUserProfile(null);
+        }}
+      />
+    );
+  }
+
   return (
     <div style={{ width: "100vw", height: "100vh", position: "relative", overflow: "hidden" }}>
       {/* R3F 3D Canvas */}
@@ -1326,6 +1723,143 @@ JSON Schema:
           }}
         >
           🖱️ <strong>Mouse Drag:</strong> Obzor | ⌨️ <strong>WASD:</strong> Harakat | 🚪 <strong>E:</strong> Eshik | 💬 <strong>F:</strong> Suhbat
+        </div>
+      )}
+
+      {/* Non-blocking Save Progress Notification */}
+      {saveErrorBanner && (
+        <div
+          style={{
+            position: "absolute",
+            top: "16px",
+            left: "50%",
+            transform: "translateX(-50%)",
+            zIndex: 60,
+            background: saveErrorBanner.success
+              ? "rgba(16, 185, 129, 0.92)"
+              : "rgba(220, 38, 38, 0.92)",
+            backdropFilter: "blur(8px)",
+            color: "#fff",
+            padding: "8px 16px",
+            borderRadius: "10px",
+            boxShadow: "0 10px 25px rgba(0,0,0,0.4)",
+            display: "flex",
+            alignItems: "center",
+            gap: "12px",
+            fontSize: "13px",
+            fontWeight: "500",
+            maxWidth: "90vw"
+          }}
+        >
+          <span>{saveErrorBanner.success ? "" : "⚠️ "}{saveErrorBanner.message}</span>
+          {!saveErrorBanner.success && saveErrorBanner.canRetry && (
+            <button
+              onClick={handleRetrySaveProgress}
+              disabled={isRetryingSave}
+              style={{
+                background: "rgba(255, 255, 255, 0.2)",
+                border: "1px solid rgba(255, 255, 255, 0.4)",
+                color: "#fff",
+                borderRadius: "6px",
+                padding: "3px 8px",
+                fontSize: "11px",
+                fontWeight: "600",
+                cursor: isRetryingSave ? "not-allowed" : "pointer"
+              }}
+            >
+              {isRetryingSave ? "⏳ Saqlanmoqda..." : "🔄 Qaytadan urinish"}
+            </button>
+          )}
+          <button
+            onClick={() => {
+              if (saveBannerTimeoutRef.current) {
+                clearTimeout(saveBannerTimeoutRef.current);
+              }
+              setSaveErrorBanner(null);
+            }}
+            style={{
+              background: "transparent",
+              border: "none",
+              color: "#fff",
+              fontSize: "15px",
+              cursor: "pointer",
+              marginLeft: "4px",
+              lineHeight: 1
+            }}
+            title="Yopish"
+          >
+            ✕
+          </button>
+        </div>
+      )}
+
+      {/* User Session & Sign Out (Top-Left HUD) */}
+      {!dialogState.isOpen && !exitEvaluation && (
+        <div
+          style={{
+            position: "absolute",
+            top: "56px",
+            left: "15px",
+            zIndex: 15,
+            display: "flex",
+            alignItems: "center",
+            gap: "10px",
+            background: "rgba(15, 23, 42, 0.8)",
+            backdropFilter: "blur(8px)",
+            border: "1px solid rgba(255, 255, 255, 0.12)",
+            padding: "6px 12px",
+            borderRadius: "8px",
+            color: "#f8fafc",
+            fontSize: "13px"
+          }}
+        >
+          <span style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}>
+            <span style={{ fontSize: "14px" }}>👤</span>
+            <strong>{userProfile?.displayName || authUser?.displayName || authUser?.email?.split("@")[0] || "Student"}</strong>
+            <span
+              style={{
+                fontSize: "11px",
+                fontWeight: "700",
+                background: "rgba(234, 179, 8, 0.2)",
+                color: "#fde047",
+                padding: "1px 6px",
+                borderRadius: "6px"
+              }}
+            >
+              ⚡ {userProfile?.stats?.totalXP ?? 0} XP
+            </span>
+            {userProfile?.learningPreferences?.level && (
+              <span
+                style={{
+                  fontSize: "11px",
+                  fontWeight: "600",
+                  background: "rgba(37, 99, 235, 0.25)",
+                  color: "#93c5fd",
+                  padding: "1px 6px",
+                  borderRadius: "6px",
+                  textTransform: "capitalize"
+                }}
+              >
+                {userProfile.learningPreferences.language === "ko" ? "🇰🇷" : "🇺🇸"}{" "}
+                {userProfile.learningPreferences.level}
+              </span>
+            )}
+          </span>
+          <button
+            onClick={() => signOutUser()}
+            style={{
+              background: "rgba(239, 68, 68, 0.2)",
+              border: "1px solid rgba(239, 68, 68, 0.4)",
+              color: "#fca5a5",
+              borderRadius: "6px",
+              padding: "3px 8px",
+              fontSize: "11px",
+              fontWeight: "600",
+              cursor: "pointer"
+            }}
+          >
+            Log Out
+          </button>
         </div>
       )}
 
@@ -1489,6 +2023,37 @@ JSON Schema:
                   </div>
                 </div>
 
+                {/* XP mukofoti */}
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    marginBottom: "18px",
+                    padding: "10px 14px",
+                    borderRadius: "10px",
+                    background: exitEvaluation.completed
+                      ? "rgba(234, 179, 8, 0.12)"
+                      : "rgba(255, 255, 255, 0.05)",
+                    border: `1px solid ${
+                      exitEvaluation.completed ? "rgba(234, 179, 8, 0.3)" : "rgba(255, 255, 255, 0.1)"
+                    }`,
+                    fontSize: "14px"
+                  }}
+                >
+                  <span style={{ color: "#ccc" }}>XP mukofoti:</span>
+                  <strong
+                    style={{
+                      color: exitEvaluation.completed ? "#fde047" : "#94a3b8",
+                      fontWeight: "700"
+                    }}
+                  >
+                    {exitEvaluation.completed
+                      ? `+${calculateMissionXP(true, exitEvaluation.score)} XP`
+                      : "+0 XP — Vazifa to‘liq bajarilmadi"}
+                  </strong>
+                </div>
+
                 <div style={{ marginBottom: "18px" }}>
                   <strong style={{ color: "#ef5350", fontSize: "14px" }}>Xatolar va to'g'rilash:</strong>
                   <div style={{ marginTop: "8px", display: "flex", flexDirection: "column", gap: "8px", maxHeight: "150px", overflowY: "auto" }}>
@@ -1530,23 +2095,26 @@ JSON Schema:
                 <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
                   <button
                     onClick={() => confirmExitToOutside(exitEvaluation.doorType)}
+                    disabled={isSavingProgress}
                     style={{
                       width: "100%",
                       padding: "12px",
-                      background: "#1976d2",
+                      background: isSavingProgress ? "#555" : "#1976d2",
                       color: "#fff",
                       border: "none",
                       borderRadius: "10px",
                       fontSize: "15px",
                       fontWeight: "bold",
-                      cursor: "pointer"
+                      cursor: isSavingProgress ? "not-allowed" : "pointer",
+                      opacity: isSavingProgress ? 0.8 : 1
                     }}
                   >
-                    Davom etish (Qishloqqa chiqish)
+                    {isSavingProgress ? "⏳ Saqlanmoqda..." : "Davom etish (Qishloqqa chiqish)"}
                   </button>
 
                   <button
                     onClick={() => setExitEvaluation(null)}
+                    disabled={isSavingProgress}
                     style={{
                       width: "100%",
                       padding: "12px",
@@ -1556,7 +2124,7 @@ JSON Schema:
                       borderRadius: "10px",
                       fontSize: "14px",
                       fontWeight: "bold",
-                      cursor: "pointer"
+                      cursor: isSavingProgress ? "not-allowed" : "pointer"
                     }}
                   >
                     Qaytish (Suhbatni davom ettirish)
