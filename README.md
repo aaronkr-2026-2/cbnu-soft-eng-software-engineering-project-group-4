@@ -16,3 +16,6 @@ Every time you update your project, please make a note of what you did in the `A
 **What I changed or rejected, and why:** nothing
 **Something the AI got wrong that I had to catch:** Folder structures and DRY
 ```
+
+
+LIVE LINK: https://ai-village-puce.vercel.app/
