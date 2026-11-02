@@ -1,0 +1,1 @@
+We wanna build GTA like game (simple one) to practise languages. like if someone wants to practise his Korean, he can speak with NPSs (some kind of AI model will be connected to those NPSs for smart conversation)
