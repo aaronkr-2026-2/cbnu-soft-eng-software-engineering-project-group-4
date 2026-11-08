@@ -9,10 +9,12 @@ import {
   signOutUser,
   formatAuthError
 } from "../../services/auth";
+import { t } from "../../services/i18n";
 
-export function AuthScreen({ user, onAuthSuccess, onSignOut }) {
+export function AuthScreen({ user, onAuthSuccess, onSignOut, initialInterfaceLanguage = "en" }) {
   // Mode: "login" | "register" | "forgot_password" | "verify_email"
   const [mode, setMode] = useState(user && !user.emailVerified ? "verify_email" : "login");
+  const [interfaceLanguage, setInterfaceLanguage] = useState(initialInterfaceLanguage || "en");
   const [name, setName] = useState("");
   const [email, setEmail] = useState(user?.email || "");
   const [password, setPassword] = useState("");
@@ -34,7 +36,7 @@ export function AuthScreen({ user, onAuthSuccess, onSignOut }) {
   const handleLogin = async (e) => {
     e.preventDefault();
     if (!email.trim() || !password) {
-      setErrorMsg("Please enter both email and password.");
+      setErrorMsg(t("auth.missingCredentials", {}, interfaceLanguage));
       return;
     }
     clearMessages();
@@ -50,19 +52,19 @@ export function AuthScreen({ user, onAuthSuccess, onSignOut }) {
     }
   };
 
-  // Handle Register (Name, Email, Password - NO confirm-password)
+  // Handle Register (Name, Email, Password)
   const handleRegister = async (e) => {
     e.preventDefault();
     if (!name.trim()) {
-      setErrorMsg("Please enter your name.");
+      setErrorMsg(t("auth.missingName", {}, interfaceLanguage));
       return;
     }
     if (!email.trim()) {
-      setErrorMsg("Please enter a valid email address.");
+      setErrorMsg(t("auth.missingEmail", {}, interfaceLanguage));
       return;
     }
     if (!password || password.length < 6) {
-      setErrorMsg("Password must be at least 6 characters.");
+      setErrorMsg(t("auth.weakPassword", {}, interfaceLanguage));
       return;
     }
     clearMessages();
@@ -70,9 +72,8 @@ export function AuthScreen({ user, onAuthSuccess, onSignOut }) {
 
     try {
       const newUser = await registerWithEmail(name.trim(), email.trim(), password);
-      // Mode switches to verification screen since email/password user needs verification
       setMode("verify_email");
-      setInfoMsg("Verification link sent! Please check your email inbox.");
+      setInfoMsg(t("auth.verifSentNotice", {}, interfaceLanguage));
       if (onAuthSuccess) onAuthSuccess(newUser);
     } catch (err) {
       setErrorMsg(err.friendlyMessage || formatAuthError(err));
@@ -100,7 +101,7 @@ export function AuthScreen({ user, onAuthSuccess, onSignOut }) {
   const handlePasswordReset = async (e) => {
     e.preventDefault();
     if (!email.trim()) {
-      setErrorMsg("Please enter your registered email address.");
+      setErrorMsg(t("auth.missingEmail", {}, interfaceLanguage));
       return;
     }
     clearMessages();
@@ -108,7 +109,7 @@ export function AuthScreen({ user, onAuthSuccess, onSignOut }) {
 
     try {
       await sendPasswordReset(email.trim());
-      setInfoMsg("Password reset email sent! Check your inbox for instructions.");
+      setInfoMsg(t("auth.resetSentNotice", {}, interfaceLanguage));
     } catch (err) {
       setErrorMsg(err.friendlyMessage || formatAuthError(err));
     } finally {
@@ -124,10 +125,10 @@ export function AuthScreen({ user, onAuthSuccess, onSignOut }) {
     try {
       const refreshedUser = await reloadUser(user);
       if (refreshedUser && refreshedUser.emailVerified) {
-        setInfoMsg("Email verified successfully! Entering the village...");
+        setInfoMsg(t("auth.emailVerifiedSuccess", {}, interfaceLanguage));
         if (onAuthSuccess) onAuthSuccess(refreshedUser);
       } else {
-        setErrorMsg("Email not verified yet. Please click the verification link in your email, then click this button again.");
+        setErrorMsg(t("auth.emailNotVerifiedYet", {}, interfaceLanguage));
       }
     } catch (err) {
       setErrorMsg(err.friendlyMessage || formatAuthError(err));
@@ -143,7 +144,7 @@ export function AuthScreen({ user, onAuthSuccess, onSignOut }) {
 
     try {
       await sendVerificationEmail(user);
-      setInfoMsg("Verification email resent! Please check your inbox and spam folder.");
+      setInfoMsg(t("auth.verifSentNotice", {}, interfaceLanguage));
     } catch (err) {
       setErrorMsg(err.friendlyMessage || formatAuthError(err));
     } finally {
@@ -205,18 +206,66 @@ export function AuthScreen({ user, onAuthSuccess, onSignOut }) {
           position: "relative",
           width: "100%",
           maxWidth: "440px",
-          background: "rgba(30, 30, 36, 0.88)",
+          background: "rgba(30, 30, 36, 0.90)",
           backdropFilter: "blur(16px)",
           WebkitBackdropFilter: "blur(16px)",
           border: "1px solid rgba(255, 255, 255, 0.12)",
           borderRadius: "20px",
-          padding: "32px 36px",
+          padding: "30px 34px",
           boxShadow: "0 20px 50px rgba(0, 0, 0, 0.7), 0 0 1px rgba(255, 255, 255, 0.2)",
           zIndex: 1
         }}
       >
+        {/* Language Quick Switcher */}
+        <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: "12px" }}>
+          <div
+            style={{
+              display: "inline-flex",
+              background: "rgba(255, 255, 255, 0.08)",
+              borderRadius: "20px",
+              padding: "2px",
+              border: "1px solid rgba(255, 255, 255, 0.1)"
+            }}
+          >
+            <button
+              type="button"
+              onClick={() => setInterfaceLanguage("en")}
+              style={{
+                background: interfaceLanguage === "en" ? "#2563eb" : "transparent",
+                color: interfaceLanguage === "en" ? "#fff" : "#94a3b8",
+                border: "none",
+                borderRadius: "18px",
+                padding: "3px 10px",
+                fontSize: "11px",
+                fontWeight: "600",
+                cursor: "pointer",
+                transition: "all 0.15s ease"
+              }}
+            >
+              🇺🇸 EN
+            </button>
+            <button
+              type="button"
+              onClick={() => setInterfaceLanguage("ko")}
+              style={{
+                background: interfaceLanguage === "ko" ? "#2563eb" : "transparent",
+                color: interfaceLanguage === "ko" ? "#fff" : "#94a3b8",
+                border: "none",
+                borderRadius: "18px",
+                padding: "3px 10px",
+                fontSize: "11px",
+                fontWeight: "600",
+                cursor: "pointer",
+                transition: "all 0.15s ease"
+              }}
+            >
+              🇰🇷 KO
+            </button>
+          </div>
+        </div>
+
         {/* Brand Header */}
-        <div style={{ textAlign: "center", marginBottom: "26px" }}>
+        <div style={{ textAlign: "center", marginBottom: "24px" }}>
           <div
             style={{
               display: "inline-flex",
@@ -227,7 +276,7 @@ export function AuthScreen({ user, onAuthSuccess, onSignOut }) {
               borderRadius: "14px",
               background: "linear-gradient(135deg, #2563eb, #3b82f6)",
               fontSize: "26px",
-              marginBottom: "12px",
+              marginBottom: "10px",
               boxShadow: "0 6px 18px rgba(37, 99, 235, 0.45)"
             }}
           >
@@ -236,13 +285,13 @@ export function AuthScreen({ user, onAuthSuccess, onSignOut }) {
           <h1
             style={{
               margin: 0,
-              fontSize: "24px",
+              fontSize: "22px",
               fontWeight: "700",
               letterSpacing: "-0.02em",
               color: "#ffffff"
             }}
           >
-            AI Language Village
+            {t("auth.brandTitle", {}, interfaceLanguage)}
           </h1>
           <p
             style={{
@@ -253,12 +302,12 @@ export function AuthScreen({ user, onAuthSuccess, onSignOut }) {
             }}
           >
             {mode === "verify_email"
-              ? "Verify your email to enter the 3D village"
+              ? t("auth.verifyEmailSubtitle", {}, interfaceLanguage)
               : mode === "forgot_password"
-                ? "Reset your account password"
+                ? t("auth.resetPasswordSubtitle", {}, interfaceLanguage)
                 : mode === "register"
-                  ? "Create your account to start learning"
-                  : "Sign in to continue your language journey"}
+                  ? t("auth.createAccountSubtitle", {}, interfaceLanguage)
+                  : t("auth.welcomeBack", {}, interfaceLanguage)}
           </p>
         </div>
 
@@ -266,7 +315,7 @@ export function AuthScreen({ user, onAuthSuccess, onSignOut }) {
         {errorMsg && (
           <div
             style={{
-              marginBottom: "18px",
+              marginBottom: "16px",
               padding: "10px 14px",
               borderRadius: "10px",
               background: "rgba(239, 68, 68, 0.14)",
@@ -287,7 +336,7 @@ export function AuthScreen({ user, onAuthSuccess, onSignOut }) {
         {infoMsg && (
           <div
             style={{
-              marginBottom: "18px",
+              marginBottom: "16px",
               padding: "10px 14px",
               borderRadius: "10px",
               background: "rgba(34, 197, 94, 0.14)",
@@ -319,10 +368,10 @@ export function AuthScreen({ user, onAuthSuccess, onSignOut }) {
             >
               <div style={{ fontSize: "32px", marginBottom: "8px" }}>📬</div>
               <div style={{ fontSize: "14px", fontWeight: "600", color: "#f8fafc" }}>
-                Verification Link Sent
+                {t("auth.verifSentNotice", {}, interfaceLanguage)}
               </div>
               <div style={{ fontSize: "13px", color: "#94a3b8", marginTop: "6px", wordBreak: "break-all" }}>
-                We sent a link to <strong style={{ color: "#60a5fa" }}>{user?.email || email}</strong>. Please check your inbox and confirm your address to enter the village.
+                <strong style={{ color: "#60a5fa" }}>{user?.email || email}</strong>
               </div>
             </div>
 
@@ -345,7 +394,7 @@ export function AuthScreen({ user, onAuthSuccess, onSignOut }) {
                 transition: "all 0.15s ease"
               }}
             >
-              {loading ? "Checking status..." : "✓ I've Verified My Email — Enter Village"}
+              {loading ? t("common.loading", {}, interfaceLanguage) : `✓ ${t("auth.checkVerificationBtn", {}, interfaceLanguage)}`}
             </button>
 
             <button
@@ -364,7 +413,7 @@ export function AuthScreen({ user, onAuthSuccess, onSignOut }) {
                 marginBottom: "12px"
               }}
             >
-              {loading ? "Sending..." : "Resend Verification Email"}
+              {loading ? t("common.loading", {}, interfaceLanguage) : t("auth.resendVerificationBtn", {}, interfaceLanguage)}
             </button>
 
             <button
@@ -379,7 +428,7 @@ export function AuthScreen({ user, onAuthSuccess, onSignOut }) {
                 textDecoration: "underline"
               }}
             >
-              Log out / Use a different account
+              {t("auth.signOutSwitchAccount", {}, interfaceLanguage)}
             </button>
           </div>
         )}
@@ -390,13 +439,13 @@ export function AuthScreen({ user, onAuthSuccess, onSignOut }) {
             <form onSubmit={handleLogin} style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
               <div>
                 <label style={{ display: "block", fontSize: "12px", fontWeight: "600", color: "#cbd5e1", marginBottom: "6px" }}>
-                  Email Address
+                  {t("auth.emailLabel", {}, interfaceLanguage)}
                 </label>
                 <input
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder="student@example.com"
+                  placeholder={t("auth.emailPlaceholder", {}, interfaceLanguage)}
                   disabled={loading}
                   required
                   style={{
@@ -415,7 +464,7 @@ export function AuthScreen({ user, onAuthSuccess, onSignOut }) {
               <div>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "6px" }}>
                   <label style={{ fontSize: "12px", fontWeight: "600", color: "#cbd5e1" }}>
-                    Password
+                    {t("auth.passwordLabel", {}, interfaceLanguage)}
                   </label>
                   <button
                     type="button"
@@ -429,14 +478,14 @@ export function AuthScreen({ user, onAuthSuccess, onSignOut }) {
                       padding: 0
                     }}
                   >
-                    Forgot password?
+                    {t("auth.forgotPasswordLink", {}, interfaceLanguage)}
                   </button>
                 </div>
                 <input
                   type="password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  placeholder="••••••••"
+                  placeholder={t("auth.passwordPlaceholder", {}, interfaceLanguage)}
                   disabled={loading}
                   required
                   style={{
@@ -470,14 +519,16 @@ export function AuthScreen({ user, onAuthSuccess, onSignOut }) {
                   transition: "all 0.15s ease"
                 }}
               >
-                {loading ? "Signing in..." : "Sign In"}
+                {loading ? t("common.loading", {}, interfaceLanguage) : t("auth.signInBtn", {}, interfaceLanguage)}
               </button>
             </form>
 
             {/* Divider */}
             <div style={{ display: "flex", alignItems: "center", margin: "20px 0", gap: "12px" }}>
               <div style={{ flex: 1, height: "1px", background: "rgba(255, 255, 255, 0.12)" }} />
-              <span style={{ fontSize: "12px", color: "#64748b", textTransform: "uppercase" }}>or</span>
+              <span style={{ fontSize: "12px", color: "#64748b" }}>
+                {t("auth.orDivider", {}, interfaceLanguage)}
+              </span>
               <div style={{ flex: 1, height: "1px", background: "rgba(255, 255, 255, 0.12)" }} />
             </div>
 
@@ -520,12 +571,12 @@ export function AuthScreen({ user, onAuthSuccess, onSignOut }) {
                   d="M12 23c3.2 0 6-1.1 8-3l-3.7-2.9c-1.1.7-2.5 1.2-4.3 1.2-3.1 0-5.5-2.3-6.4-5.2L1.9 16c1.8 3.7 5.6 7 10.1 7z"
                 />
               </svg>
-              Continue with Google
+              {t("auth.googleSignInBtn", {}, interfaceLanguage)}
             </button>
 
             {/* Switch to Register */}
             <div style={{ textAlign: "center", marginTop: "22px", fontSize: "13px", color: "#94a3b8" }}>
-              Don't have an account?{" "}
+              {t("auth.noAccountPrompt", {}, interfaceLanguage)}{" "}
               <button
                 type="button"
                 onClick={() => switchMode("register")}
@@ -538,7 +589,7 @@ export function AuthScreen({ user, onAuthSuccess, onSignOut }) {
                   padding: 0
                 }}
               >
-                Sign up
+                {t("auth.signUpLink", {}, interfaceLanguage)}
               </button>
             </div>
           </div>
@@ -550,13 +601,13 @@ export function AuthScreen({ user, onAuthSuccess, onSignOut }) {
             <form onSubmit={handleRegister} style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
               <div>
                 <label style={{ display: "block", fontSize: "12px", fontWeight: "600", color: "#cbd5e1", marginBottom: "6px" }}>
-                  Full Name
+                  {t("auth.nameLabel", {}, interfaceLanguage)}
                 </label>
                 <input
                   type="text"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  placeholder="Alex Smith"
+                  placeholder={t("auth.namePlaceholder", {}, interfaceLanguage)}
                   disabled={loading}
                   required
                   style={{
@@ -574,13 +625,13 @@ export function AuthScreen({ user, onAuthSuccess, onSignOut }) {
 
               <div>
                 <label style={{ display: "block", fontSize: "12px", fontWeight: "600", color: "#cbd5e1", marginBottom: "6px" }}>
-                  Email Address
+                  {t("auth.emailLabel", {}, interfaceLanguage)}
                 </label>
                 <input
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder="student@example.com"
+                  placeholder={t("auth.emailPlaceholder", {}, interfaceLanguage)}
                   disabled={loading}
                   required
                   style={{
@@ -598,13 +649,13 @@ export function AuthScreen({ user, onAuthSuccess, onSignOut }) {
 
               <div>
                 <label style={{ display: "block", fontSize: "12px", fontWeight: "600", color: "#cbd5e1", marginBottom: "6px" }}>
-                  Password (min 6 characters)
+                  {t("auth.passwordLabel", {}, interfaceLanguage)}
                 </label>
                 <input
                   type="password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  placeholder="••••••••"
+                  placeholder={t("auth.passwordPlaceholder", {}, interfaceLanguage)}
                   disabled={loading}
                   required
                   style={{
@@ -638,14 +689,16 @@ export function AuthScreen({ user, onAuthSuccess, onSignOut }) {
                   transition: "all 0.15s ease"
                 }}
               >
-                {loading ? "Creating account..." : "Create Account"}
+                {loading ? t("common.loading", {}, interfaceLanguage) : t("auth.signUpBtn", {}, interfaceLanguage)}
               </button>
             </form>
 
             {/* Divider */}
             <div style={{ display: "flex", alignItems: "center", margin: "20px 0", gap: "12px" }}>
               <div style={{ flex: 1, height: "1px", background: "rgba(255, 255, 255, 0.12)" }} />
-              <span style={{ fontSize: "12px", color: "#64748b", textTransform: "uppercase" }}>or</span>
+              <span style={{ fontSize: "12px", color: "#64748b" }}>
+                {t("auth.orDivider", {}, interfaceLanguage)}
+              </span>
               <div style={{ flex: 1, height: "1px", background: "rgba(255, 255, 255, 0.12)" }} />
             </div>
 
@@ -688,12 +741,12 @@ export function AuthScreen({ user, onAuthSuccess, onSignOut }) {
                   d="M12 23c3.2 0 6-1.1 8-3l-3.7-2.9c-1.1.7-2.5 1.2-4.3 1.2-3.1 0-5.5-2.3-6.4-5.2L1.9 16c1.8 3.7 5.6 7 10.1 7z"
                 />
               </svg>
-              Continue with Google
+              {t("auth.googleSignInBtn", {}, interfaceLanguage)}
             </button>
 
             {/* Switch to Login */}
             <div style={{ textAlign: "center", marginTop: "22px", fontSize: "13px", color: "#94a3b8" }}>
-              Already have an account?{" "}
+              {t("auth.haveAccountPrompt", {}, interfaceLanguage)}{" "}
               <button
                 type="button"
                 onClick={() => switchMode("login")}
@@ -706,7 +759,7 @@ export function AuthScreen({ user, onAuthSuccess, onSignOut }) {
                   padding: 0
                 }}
               >
-                Log in
+                {t("auth.signInLink", {}, interfaceLanguage)}
               </button>
             </div>
           </div>
@@ -718,13 +771,13 @@ export function AuthScreen({ user, onAuthSuccess, onSignOut }) {
             <form onSubmit={handlePasswordReset} style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
               <div>
                 <label style={{ display: "block", fontSize: "12px", fontWeight: "600", color: "#cbd5e1", marginBottom: "6px" }}>
-                  Registered Email Address
+                  {t("auth.emailLabel", {}, interfaceLanguage)}
                 </label>
                 <input
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder="student@example.com"
+                  placeholder={t("auth.emailPlaceholder", {}, interfaceLanguage)}
                   disabled={loading}
                   required
                   style={{
@@ -758,7 +811,7 @@ export function AuthScreen({ user, onAuthSuccess, onSignOut }) {
                   transition: "all 0.15s ease"
                 }}
               >
-                {loading ? "Sending link..." : "Send Reset Link"}
+                {loading ? t("common.loading", {}, interfaceLanguage) : t("auth.resetPasswordBtn", {}, interfaceLanguage)}
               </button>
             </form>
 
@@ -775,7 +828,7 @@ export function AuthScreen({ user, onAuthSuccess, onSignOut }) {
                   cursor: "pointer"
                 }}
               >
-                ← Back to Log In
+                {t("auth.backToLogin", {}, interfaceLanguage)}
               </button>
             </div>
           </div>
@@ -791,9 +844,10 @@ export function AuthScreen({ user, onAuthSuccess, onSignOut }) {
           textAlign: "center"
         }}
       >
-        AI-Language-Village • 3D Real-time Spoken English Practice
+        AI-Language-Village • {t("auth.brandSubtitle", {}, interfaceLanguage)}
       </div>
     </div>
   );
 }
+
 export default AuthScreen;

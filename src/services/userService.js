@@ -88,6 +88,7 @@ export async function createUserProfileIfMissing(user) {
       uid: user.uid,
       displayName: user.displayName?.trim() || user.email?.split("@")[0] || "Student",
       email: user.email || "",
+      interfaceLanguage: "en",
       createdAt: serverTimestamp(),
       onboardingCompleted: false
     };

@@ -26,6 +26,9 @@ export function VillageCanvas({
   isDialogOpen,
   hasModalOpen,
   isTalking,
+  shopItems,
+  collectedItemIds,
+  onPickupItem,
   onPromptChange,
   onInteractDoor,
   onInteractNPC
@@ -76,7 +79,12 @@ export function VillageCanvas({
           <VillageBuildings />
           <Traffic isOutside={currentLocation === "outside"} />
         </group>
-        <Shop isTalking={isTalking} currentLocation={currentLocation} />
+        <Shop
+          isTalking={isTalking}
+          currentLocation={currentLocation}
+          shopItems={shopItems}
+          collectedItemIds={collectedItemIds}
+        />
         <Cafe isTalking={isTalking} currentLocation={currentLocation} />
         <Hotel isTalking={isTalking} currentLocation={currentLocation} />
         <Hospital isTalking={isTalking} currentLocation={currentLocation} />
@@ -96,9 +104,12 @@ export function VillageCanvas({
           currentLocation={currentLocation}
           isDialogOpen={isDialogOpen}
           hasModalOpen={hasModalOpen}
+          shopItems={shopItems}
+          collectedItemIds={collectedItemIds}
           onPromptChange={onPromptChange}
           onInteractDoor={onInteractDoor}
           onInteractNPC={onInteractNPC}
+          onPickupItem={onPickupItem}
         />
         <CameraController
           playerRef={playerRef}

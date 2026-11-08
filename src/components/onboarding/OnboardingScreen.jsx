@@ -1,62 +1,30 @@
 import React, { useState } from "react";
 import { updateUserProfile } from "../../services/userService";
-
-const LANGUAGES = [
-  {
-    id: "en",
-    name: "English",
-    flag: "🇺🇸",
-    description: "Practice spoken English with village shopkeepers, doctors, tutors, and residents."
-  },
-  {
-    id: "ko",
-    name: "Korean",
-    flag: "🇰🇷",
-    description: "Explore Korean language essentials and everyday situational conversations."
-  }
-];
-
-const LEVELS = [
-  {
-    id: "beginner",
-    title: "Beginner",
-    subtitle: "A1 – A2 Level",
-    description: "Simple greetings, basic vocabulary, and short guided sentences with friendly hints."
-  },
-  {
-    id: "intermediate",
-    title: "Intermediate",
-    subtitle: "B1 – B2 Level",
-    description: "Comfortable with everyday conversations, ordering food, and situational roleplay."
-  },
-  {
-    id: "advanced",
-    title: "Advanced",
-    subtitle: "C1 – C2 Level",
-    description: "Fluent discussions, natural idioms, complex sentence structures, and nuanced feedback."
-  }
-];
-
-const GOALS = [
-  { id: "daily_conversation", label: "Daily conversation & casual chat", icon: "💬" },
-  { id: "speaking_pronunciation", label: "Speaking confidence & pronunciation", icon: "🎙️" },
-  { id: "work_career", label: "Work, job interviews & career English", icon: "💼" },
-  { id: "study_university", label: "Study, campus life & academic discussion", icon: "📚" },
-  { id: "travel", label: "Travel, hotel booking & navigation", icon: "✈️" },
-  { id: "exam_prep", label: "Exam & test preparation (IELTS, TOEFL, CEFR)", icon: "📝" }
-];
+import { t } from "../../services/i18n";
 
 export function OnboardingScreen({ user, profile, onComplete, onSignOut }) {
-  // Step 1: Language (en | ko)
-  // Step 2: Level (beginner | intermediate | advanced)
-  // Step 3: Goals (multiple selection, optional)
+  // Step 1: Interface Language (en | ko) + Name
+  // Step 2: Learning Language (en | ko)
+  // Step 3: Level (beginner | intermediate | advanced)
+  // Step 4: Goals (multiple selection, optional)
   const [step, setStep] = useState(1);
 
-  // Selected values
-  const [language, setLanguage] = useState(profile?.learningPreferences?.language || "en");
-  const [level, setLevel] = useState(profile?.learningPreferences?.level || "intermediate");
+  // Language settings: Interface and Learning must remain independent
+  const [interfaceLanguage, setInterfaceLanguage] = useState(
+    profile?.interfaceLanguage || "en"
+  );
+  const [learningLanguage, setLearningLanguage] = useState(
+    profile?.learningPreferences?.learningLanguage ||
+    profile?.learningPreferences?.language ||
+    (profile?.interfaceLanguage === "ko" ? "en" : "ko")
+  );
+  const [level, setLevel] = useState(
+    profile?.learningPreferences?.level || "beginner"
+  );
   const [selectedGoals, setSelectedGoals] = useState(
-    Array.isArray(profile?.learningPreferences?.goals) ? profile.learningPreferences.goals : []
+    Array.isArray(profile?.learningPreferences?.goals)
+      ? profile.learningPreferences.goals
+      : []
   );
 
   // Fallback for missing displayName
@@ -65,6 +33,68 @@ export function OnboardingScreen({ user, profile, onComplete, onSignOut }) {
 
   const [saving, setSaving] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
+
+  const INTERFACE_OPTIONS = [
+    {
+      id: "en",
+      name: "English",
+      nativeName: "English",
+      flag: "🇺🇸",
+      description: "Menus, buttons, instructions, and teacher feedback will be displayed in English."
+    },
+    {
+      id: "ko",
+      name: "Korean",
+      nativeName: "한국어",
+      flag: "🇰🇷",
+      description: "메뉴, 버튼, 미션 안내 및 평가 피드백이 한국어로 표시됩니다."
+    }
+  ];
+
+  const LEARNING_OPTIONS = [
+    {
+      id: "en",
+      flag: "🇺🇸",
+      name: t("onboarding.englishLangName", {}, interfaceLanguage),
+      desc: t("onboarding.englishLangDesc", {}, interfaceLanguage)
+    },
+    {
+      id: "ko",
+      flag: "🇰🇷",
+      name: t("onboarding.koreanLangName", {}, interfaceLanguage),
+      desc: t("onboarding.koreanLangDesc", {}, interfaceLanguage)
+    }
+  ];
+
+  const LEVEL_OPTIONS = [
+    {
+      id: "beginner",
+      title: t("onboarding.beginnerTitle", {}, interfaceLanguage),
+      subtitle: t("onboarding.beginnerSubtitle", {}, interfaceLanguage),
+      desc: t("onboarding.beginnerDesc", {}, interfaceLanguage)
+    },
+    {
+      id: "intermediate",
+      title: t("onboarding.intermediateTitle", {}, interfaceLanguage),
+      subtitle: t("onboarding.intermediateSubtitle", {}, interfaceLanguage),
+      desc: t("onboarding.intermediateDesc", {}, interfaceLanguage)
+    },
+    {
+      id: "advanced",
+      title: t("onboarding.advancedTitle", {}, interfaceLanguage),
+      subtitle: t("onboarding.advancedSubtitle", {}, interfaceLanguage),
+      desc: t("onboarding.advancedDesc", {}, interfaceLanguage)
+    }
+  ];
+
+  const GOAL_OPTIONS = [
+    { id: "daily_conversation", label: t("onboarding.goalDaily", {}, interfaceLanguage), icon: "💬" },
+    { id: "speaking_pronunciation", label: t("onboarding.goalSpeaking", {}, interfaceLanguage), icon: "🎙️" },
+    { id: "work_career", label: t("onboarding.goalWork", {}, interfaceLanguage), icon: "💼" },
+    { id: "study_university", label: t("onboarding.goalStudy", {}, interfaceLanguage), icon: "📚" },
+    { id: "travel", label: t("onboarding.goalTravel", {}, interfaceLanguage), icon: "✈️" },
+    { id: "exam_prep", label: t("onboarding.goalExam", {}, interfaceLanguage), icon: "📝" }
+  ];
 
   const toggleGoal = (goalId) => {
     setErrorMsg("");
@@ -76,21 +106,27 @@ export function OnboardingScreen({ user, profile, onComplete, onSignOut }) {
   const handleNextStep = () => {
     setErrorMsg("");
     if (step === 1) {
-      if (!language) {
-        setErrorMsg("Please select a language to practice.");
+      if (!interfaceLanguage) {
+        setErrorMsg(t("onboarding.errSelectInterface", {}, interfaceLanguage));
         return;
       }
       if (!initialName && !customName.trim()) {
-        setErrorMsg("Please enter a display name to continue.");
+        setErrorMsg(t("onboarding.errEnterName", {}, interfaceLanguage));
         return;
       }
       setStep(2);
     } else if (step === 2) {
-      if (!level) {
-        setErrorMsg("Please select your proficiency level.");
+      if (!learningLanguage) {
+        setErrorMsg(t("onboarding.errSelectLearning", {}, interfaceLanguage));
         return;
       }
       setStep(3);
+    } else if (step === 3) {
+      if (!level) {
+        setErrorMsg(t("onboarding.errSelectLevel", {}, interfaceLanguage));
+        return;
+      }
+      setStep(4);
     }
   };
 
@@ -114,8 +150,10 @@ export function OnboardingScreen({ user, profile, onComplete, onSignOut }) {
 
     const updates = {
       onboardingCompleted: true,
+      interfaceLanguage,
       learningPreferences: {
-        language,
+        language: learningLanguage,
+        learningLanguage,
         level,
         goals: goalsToSave
       }
@@ -142,7 +180,7 @@ export function OnboardingScreen({ user, profile, onComplete, onSignOut }) {
     }
   };
 
-  const currentDisplayName = customName.trim() || user?.displayName || profile?.displayName || "Student";
+  const currentDisplayName = customName.trim() || user?.displayName || profile?.displayName || t("common.student", {}, interfaceLanguage);
 
   return (
     <div
@@ -183,7 +221,7 @@ export function OnboardingScreen({ user, profile, onComplete, onSignOut }) {
           position: "relative",
           width: "100%",
           maxWidth: "520px",
-          background: "rgba(30, 30, 38, 0.90)",
+          background: "rgba(30, 30, 38, 0.92)",
           backdropFilter: "blur(18px)",
           WebkitBackdropFilter: "blur(18px)",
           border: "1px solid rgba(255, 255, 255, 0.12)",
@@ -196,38 +234,27 @@ export function OnboardingScreen({ user, profile, onComplete, onSignOut }) {
         }}
       >
         {/* Top Stepper Indicator */}
-        <div style={{ marginBottom: "24px" }}>
+        <div style={{ marginBottom: "22px" }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "10px" }}>
             <span style={{ fontSize: "12px", textTransform: "uppercase", letterSpacing: "0.08em", color: "#60a5fa", fontWeight: "700" }}>
-              Step {step} of 3
+              {t("onboarding.stepIndicator", { current: step, total: 4 }, interfaceLanguage)}
             </span>
             <span style={{ fontSize: "12px", color: "#94a3b8" }}>
-              Welcome, <strong style={{ color: "#f8fafc" }}>{currentDisplayName}</strong>
+              {t("onboarding.welcomeStudent", { name: currentDisplayName }, interfaceLanguage)}
             </span>
           </div>
 
           <div style={{ display: "flex", gap: "6px", width: "100%", height: "5px", background: "rgba(255, 255, 255, 0.08)", borderRadius: "3px", overflow: "hidden" }}>
-            <div
-              style={{
-                flex: 1,
-                background: step >= 1 ? "#3b82f6" : "transparent",
-                transition: "background 0.3s ease"
-              }}
-            />
-            <div
-              style={{
-                flex: 1,
-                background: step >= 2 ? "#3b82f6" : "transparent",
-                transition: "background 0.3s ease"
-              }}
-            />
-            <div
-              style={{
-                flex: 1,
-                background: step >= 3 ? "#3b82f6" : "transparent",
-                transition: "background 0.3s ease"
-              }}
-            />
+            {[1, 2, 3, 4].map((i) => (
+              <div
+                key={i}
+                style={{
+                  flex: 1,
+                  background: step >= i ? "#3b82f6" : "transparent",
+                  transition: "background 0.3s ease"
+                }}
+              />
+            ))}
           </div>
         </div>
 
@@ -252,27 +279,27 @@ export function OnboardingScreen({ user, profile, onComplete, onSignOut }) {
           </div>
         )}
 
-        {/* STEP 1: Choose Learning Language */}
+        {/* STEP 1: Choose Interface Language */}
         {step === 1 && (
           <div>
             <h2 style={{ margin: "0 0 6px 0", fontSize: "21px", fontWeight: "700", color: "#fff" }}>
-              What language do you want to learn?
+              {t("onboarding.interfaceLangTitle", {}, interfaceLanguage)}
             </h2>
             <p style={{ margin: "0 0 20px 0", fontSize: "13px", color: "#94a3b8", lineHeight: 1.4 }}>
-              Choose your practice language for conversations with village NPCs. (This is separate from the app interface language).
+              {t("onboarding.interfaceLangSubtitle", {}, interfaceLanguage)}
             </p>
 
             {/* If user lacks display name, allow entering one */}
             {!initialName && (
               <div style={{ marginBottom: "18px" }}>
                 <label style={{ display: "block", fontSize: "12px", fontWeight: "600", color: "#cbd5e1", marginBottom: "6px" }}>
-                  What should we call you?
+                  {t("onboarding.namePrompt", {}, interfaceLanguage)}
                 </label>
                 <input
                   type="text"
                   value={customName}
                   onChange={(e) => setCustomName(e.target.value)}
-                  placeholder="Enter your name"
+                  placeholder={t("onboarding.namePlaceholder", {}, interfaceLanguage)}
                   style={{
                     width: "100%",
                     padding: "11px 14px",
@@ -288,14 +315,69 @@ export function OnboardingScreen({ user, profile, onComplete, onSignOut }) {
             )}
 
             <div style={{ display: "flex", flexDirection: "column", gap: "12px", marginBottom: "26px" }}>
-              {LANGUAGES.map((lang) => {
-                const isSelected = language === lang.id;
+              {INTERFACE_OPTIONS.map((opt) => {
+                const isSelected = interfaceLanguage === opt.id;
+                return (
+                  <button
+                    key={opt.id}
+                    type="button"
+                    onClick={() => {
+                      setInterfaceLanguage(opt.id);
+                      setErrorMsg("");
+                    }}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "16px",
+                      padding: "16px",
+                      borderRadius: "14px",
+                      border: isSelected ? "2px solid #3b82f6" : "1px solid rgba(255, 255, 255, 0.1)",
+                      background: isSelected ? "rgba(37, 99, 235, 0.16)" : "rgba(255, 255, 255, 0.04)",
+                      boxShadow: isSelected ? "0 4px 18px rgba(37, 99, 235, 0.25)" : "none",
+                      color: "#fff",
+                      textAlign: "left",
+                      cursor: "pointer",
+                      transition: "all 0.15s ease"
+                    }}
+                  >
+                    <span style={{ fontSize: "32px" }}>{opt.flag}</span>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontSize: "16px", fontWeight: "600", color: isSelected ? "#93c5fd" : "#f8fafc" }}>
+                        {opt.nativeName} ({opt.name})
+                      </div>
+                      <div style={{ fontSize: "12px", color: "#94a3b8", marginTop: "3px", lineHeight: 1.35 }}>
+                        {opt.description}
+                      </div>
+                    </div>
+                    {isSelected && (
+                      <span style={{ color: "#60a5fa", fontSize: "18px", fontWeight: "bold" }}>✓</span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* STEP 2: Choose Learning Language */}
+        {step === 2 && (
+          <div>
+            <h2 style={{ margin: "0 0 6px 0", fontSize: "21px", fontWeight: "700", color: "#fff" }}>
+              {t("onboarding.learningLangTitle", {}, interfaceLanguage)}
+            </h2>
+            <p style={{ margin: "0 0 20px 0", fontSize: "13px", color: "#94a3b8", lineHeight: 1.4 }}>
+              {t("onboarding.learningLangSubtitle", {}, interfaceLanguage)}
+            </p>
+
+            <div style={{ display: "flex", flexDirection: "column", gap: "12px", marginBottom: "26px" }}>
+              {LEARNING_OPTIONS.map((lang) => {
+                const isSelected = learningLanguage === lang.id;
                 return (
                   <button
                     key={lang.id}
                     type="button"
                     onClick={() => {
-                      setLanguage(lang.id);
+                      setLearningLanguage(lang.id);
                       setErrorMsg("");
                     }}
                     style={{
@@ -319,7 +401,7 @@ export function OnboardingScreen({ user, profile, onComplete, onSignOut }) {
                         {lang.name}
                       </div>
                       <div style={{ fontSize: "12px", color: "#94a3b8", marginTop: "3px", lineHeight: 1.35 }}>
-                        {lang.description}
+                        {lang.desc}
                       </div>
                     </div>
                     {isSelected && (
@@ -332,18 +414,18 @@ export function OnboardingScreen({ user, profile, onComplete, onSignOut }) {
           </div>
         )}
 
-        {/* STEP 2: Choose Proficiency Level */}
-        {step === 2 && (
+        {/* STEP 3: Choose Proficiency Level */}
+        {step === 3 && (
           <div>
             <h2 style={{ margin: "0 0 6px 0", fontSize: "21px", fontWeight: "700", color: "#fff" }}>
-              Choose your proficiency level
+              {t("onboarding.levelTitle", {}, interfaceLanguage)}
             </h2>
             <p style={{ margin: "0 0 20px 0", fontSize: "13px", color: "#94a3b8", lineHeight: 1.4 }}>
-              Select the level that feels right for you. No placement test is required—you can explore missions at your own pace.
+              {t("onboarding.levelSubtitle", {}, interfaceLanguage)}
             </p>
 
             <div style={{ display: "flex", flexDirection: "column", gap: "12px", marginBottom: "26px" }}>
-              {LEVELS.map((lvl) => {
+              {LEVEL_OPTIONS.map((lvl) => {
                 const isSelected = level === lvl.id;
                 return (
                   <button
@@ -374,7 +456,7 @@ export function OnboardingScreen({ user, profile, onComplete, onSignOut }) {
                       </span>
                     </div>
                     <div style={{ fontSize: "12px", color: "#94a3b8", lineHeight: 1.35 }}>
-                      {lvl.description}
+                      {lvl.desc}
                     </div>
                   </button>
                 );
@@ -383,21 +465,23 @@ export function OnboardingScreen({ user, profile, onComplete, onSignOut }) {
           </div>
         )}
 
-        {/* STEP 3: Choose Learning Goals (Multi-select, Optional) */}
-        {step === 3 && (
+        {/* STEP 4: Choose Learning Goals (Multi-select, Optional) */}
+        {step === 4 && (
           <div>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: "6px" }}>
               <h2 style={{ margin: 0, fontSize: "21px", fontWeight: "700", color: "#fff" }}>
-                What are your main goals?
+                {t("onboarding.goalsTitle", {}, interfaceLanguage)}
               </h2>
-              <span style={{ fontSize: "12px", color: "#64748b" }}>Optional</span>
+              <span style={{ fontSize: "12px", color: "#64748b" }}>
+                {t("onboarding.optionalBadge", {}, interfaceLanguage)}
+              </span>
             </div>
             <p style={{ margin: "0 0 18px 0", fontSize: "13px", color: "#94a3b8", lineHeight: 1.4 }}>
-              Select any areas you want to prioritize in the village. You can choose multiple or skip this step.
+              {t("onboarding.goalsSubtitle", {}, interfaceLanguage)}
             </p>
 
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px", marginBottom: "24px" }}>
-              {GOALS.map((g) => {
+              {GOAL_OPTIONS.map((g) => {
                 const isSelected = selectedGoals.includes(g.id);
                 return (
                   <button
@@ -449,11 +533,11 @@ export function OnboardingScreen({ user, profile, onComplete, onSignOut }) {
                 cursor: saving ? "not-allowed" : "pointer"
               }}
             >
-              ← Back
+              ← {t("common.back", {}, interfaceLanguage)}
             </button>
           )}
 
-          {step < 3 ? (
+          {step < 4 ? (
             <button
               type="button"
               onClick={handleNextStep}
@@ -471,7 +555,7 @@ export function OnboardingScreen({ user, profile, onComplete, onSignOut }) {
                 transition: "all 0.15s ease"
               }}
             >
-              Continue →
+              {t("common.continue", {}, interfaceLanguage)} →
             </button>
           ) : (
             <div style={{ display: "flex", gap: "10px", flex: 1 }}>
@@ -491,7 +575,7 @@ export function OnboardingScreen({ user, profile, onComplete, onSignOut }) {
                   cursor: saving ? "not-allowed" : "pointer"
                 }}
               >
-                Skip & Enter
+                {t("common.skip", {}, interfaceLanguage)}
               </button>
 
               <button
@@ -513,7 +597,7 @@ export function OnboardingScreen({ user, profile, onComplete, onSignOut }) {
                   transition: "all 0.15s ease"
                 }}
               >
-                {saving ? "Saving..." : "Finish & Enter Village 🏡"}
+                {saving ? t("common.saving", {}, interfaceLanguage) : t("common.finish", {}, interfaceLanguage)}
               </button>
             </div>
           )}
@@ -534,7 +618,7 @@ export function OnboardingScreen({ user, profile, onComplete, onSignOut }) {
               textDecoration: "underline"
             }}
           >
-            Log out / Switch account
+            {t("auth.signOutSwitchAccount", {}, interfaceLanguage)}
           </button>
         </div>
       </div>

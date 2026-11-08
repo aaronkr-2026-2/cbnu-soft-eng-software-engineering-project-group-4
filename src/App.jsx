@@ -2,483 +2,59 @@ import React, { useEffect, useRef, useState } from "react";
 import { VillageCanvas } from "./components/r3f/VillageCanvas";
 import { MiniMap } from "./components/ui/MiniMap";
 import { ProgressPanelModal } from "./components/ui/ProgressPanelModal";
+import { SettingsModal } from "./components/ui/SettingsModal";
 import { AuthScreen } from "./components/auth/AuthScreen";
 import { OnboardingScreen } from "./components/onboarding/OnboardingScreen";
 import { subscribeToAuthState, signOutUser, isUserVerified } from "./services/auth";
-import { createUserProfileIfMissing } from "./services/userService";
+import { createUserProfileIfMissing, updateUserProfile } from "./services/userService";
 import { recordMissionProgress, deriveFacilityName, calculateMissionXP } from "./services/progressService";
+import { getSpeechRecognitionLanguage, processSpeechRecognitionResults } from "./services/speechLogic";
+import {
+  buildNPCSystemPrompt,
+  formatConversationHistory,
+  getNPCInitialGreeting,
+  getNPCGender,
+  getNPCProfile
+} from "./services/npcPromptLogic";
+import {
+  getVoiceStatusPresentation,
+  mapSpeechErrorToFeedback,
+  canStartListening,
+  getBestVoiceForNPC,
+  sanitizeSpeechText,
+  runKoreanTTSDiagnostics
+} from "./services/voiceFeedbackLogic";
+import {
+  handleNPCInteraction,
+  handleAIResponse,
+  handleReplayAction,
+  formatInteractionTrace
+} from "./services/npcInteractionService";
+import {
+  ITEM_DEFINITIONS,
+  DEFAULT_SHOP_3D_ITEMS,
+  addItemToInventory,
+  isItemAlreadyCollected,
+  validateMissionInventory,
+  getLocalizedItemName,
+  formatInventorySummary
+} from "./services/inventoryLogic";
+import {
+  MISSIONS_CATALOG,
+  getLocalizedMission,
+  getMissionGoal,
+  getRandomMission,
+  selectNextMission
+} from "./services/missionsData";
+import {
+  t,
+  resolveUserLanguagePreferences,
+  getLanguageName,
+  getLevelName
+} from "./services/i18n";
 
 const OUTDOOR_RADIUS = 3.55;
 const OUTDOOR_BASE_PHI = 1.415;
-
-const SHOP_MISSIONS = [
-  {
-    title: "🏪 Shop Mission",
-    text: "Buy 2 bottles of water and 1 apple.",
-    goal: "Buy exactly 2 bottles of water and 1 apple."
-  },
-  {
-    title: "🏪 Shop Mission",
-    text: "Buy 3 apples and 1 bottle of milk.",
-    goal: "Buy exactly 3 apples and 1 bottle of milk."
-  },
-  {
-    title: "🏪 Shop Mission",
-    text: "Buy 1 loaf of bread and 2 bottles of water.",
-    goal: "Buy exactly 1 loaf of bread and 2 bottles of water."
-  },
-  {
-    title: "🏪 Shop Mission",
-    text: "Buy 2 bottles of milk and 1 apple.",
-    goal: "Buy exactly 2 bottles of milk and 1 apple."
-  }
-];
-
-const CAFE_MISSIONS = [
-  {
-    title: "☕ Cafe Mission",
-    text: "Order 1 hot Americano and 1 croissant.",
-    goal: "Order exactly 1 hot Americano and 1 croissant."
-  },
-  {
-    title: "☕ Cafe Mission",
-    text: "Order 1 latte and 1 sandwich.",
-    goal: "Order exactly 1 latte and 1 sandwich."
-  },
-  {
-    title: "☕ Cafe Mission",
-    text: "Order 1 green tea and 1 cake.",
-    goal: "Order exactly 1 green tea and 1 cake."
-  },
-  {
-    title: "☕ Cafe Mission",
-    text: "Order 1 cappuccino and 1 muffin.",
-    goal: "Order exactly 1 cappuccino and 1 muffin."
-  }
-];
-
-const HOTEL_MISSIONS = [
-  {
-    title: "🏨 Hotel Mission",
-    text: "Book a single room for two nights.",
-    goal: "Book exactly one single room for two nights."
-  },
-  {
-    title: "🏨 Hotel Mission",
-    text: "Ask for a double room for one night and ask about the breakfast.",
-    goal: "Ask about a double room for one night and ask about breakfast."
-  },
-  {
-    title: "🏨 Hotel Mission",
-    text: "Check in and ask what time breakfast starts.",
-    goal: "Complete a hotel check-in conversation and ask what time breakfast starts."
-  },
-  {
-    title: "🏨 Hotel Mission",
-    text: "Ask for a room with Wi-Fi and ask about the price.",
-    goal: "Ask for a room with Wi-Fi and ask about its price."
-  }
-];
-
-const HOSPITAL_MISSIONS = [
-  {
-    title: "🏥 Hospital Mission",
-    text: "Make a doctor's appointment and ask what time it is.",
-    goal: "Make a doctor's appointment and ask what time it is."
-  },
-  {
-    title: "🏥 Hospital Mission",
-    text: "Ask for a general check-up and ask about the price.",
-    goal: "Ask for a general check-up and ask about the price."
-  },
-  {
-    title: "🏥 Hospital Mission",
-    text: "Ask where the emergency room is and what time the hospital closes.",
-    goal: "Ask where the emergency room is and what time the hospital closes."
-  },
-  {
-    title: "🏥 Hospital Mission",
-    text: "Ask to see a doctor and ask how long you need to wait.",
-    goal: "Ask to see a doctor and ask how long you need to wait."
-  }
-];
-
-const BANK_MISSIONS = [
-  {
-    title: "🏦 Bank Mission",
-    text: "Ask about opening a bank account and what documents are needed.",
-    goal: "Ask about opening a bank account and ask what documents are needed."
-  },
-  {
-    title: "🏦 Bank Mission",
-    text: "Ask about transferring money and the transfer fee.",
-    goal: "Ask about transferring money and the transfer fee."
-  },
-  {
-    title: "🏦 Bank Mission",
-    text: "Ask how to get a bank card and how long it takes.",
-    goal: "Ask how to get a bank card and how long it takes."
-  },
-  {
-    title: "🏦 Bank Mission",
-    text: "Ask about depositing money and the minimum amount.",
-    goal: "Ask about depositing money and the minimum amount."
-  }
-];
-
-const LIBRARY_MISSIONS = [
-  {
-    title: "📚 Library Mission",
-    text: "Ask the librarian where the English learning books are and ask if you can borrow one.",
-    goal: "Ask the librarian where the English learning books are and ask if you can borrow one."
-  },
-  {
-    title: "📚 Library Mission",
-    text: "Ask for a book about Korean language learning and ask how long you can borrow it.",
-    goal: "Ask for a book about Korean language learning and ask how long you can borrow it."
-  },
-  {
-    title: "📚 Library Mission",
-    text: "Ask where the history section is and ask if the library has beginner books.",
-    goal: "Ask where the history section is and ask if the library has beginner books."
-  },
-  {
-    title: "📚 Library Mission",
-    text: "Ask how to get a library card and ask what documents are needed.",
-    goal: "Ask how to get a library card and ask what documents are needed."
-  }
-];
-
-const POLICE_MISSIONS = [
-  {
-    title: "👮 Police Station Mission",
-    text: "Report a lost wallet and ask what information you need to provide.",
-    goal: "Report a lost wallet and ask what information you need to provide."
-  },
-  {
-    title: "👮 Police Station Mission",
-    text: "Ask the police officer how to report a lost phone and what you should do next.",
-    goal: "Ask the police officer how to report a lost phone and what you should do next."
-  },
-  {
-    title: "👮 Police Station Mission",
-    text: "Ask where the nearest police station is and ask for the emergency phone number.",
-    goal: "Ask where the nearest police station is and ask for the emergency phone number."
-  },
-  {
-    title: "👮 Police Station Mission",
-    text: "Ask how to get a police report and what documents you need.",
-    goal: "Ask how to get a police report and what documents you need."
-  }
-];
-
-const LANGUAGE_SCHOOL_MISSIONS = [
-  {
-    id: "language_school_1",
-    title: "🏫 Language School Mission",
-    text: "Introduce yourself to the teacher and ask about the English class schedule.",
-    goal: "Introduce yourself to the teacher and ask about the English class schedule."
-  },
-  {
-    id: "language_school_2",
-    title: "🏫 Language School Mission",
-    text: "Ask the teacher about the English class level and the class price.",
-    goal: "Ask the teacher about the English class level and the class price."
-  },
-  {
-    id: "language_school_3",
-    title: "🏫 Language School Mission",
-    text: "Ask how many days per week the English class meets and how long each class lasts.",
-    goal: "Ask how many days per week the English class meets and how long each class lasts."
-  },
-  {
-    id: "language_school_4",
-    title: "🏫 Language School Mission",
-    text: "Ask about joining the class and what materials you need to bring.",
-    goal: "Ask about joining the class and what materials you need to bring."
-  }
-];
-
-const STUDY_CENTER_MISSIONS = [
-  {
-    id: "study_center_1",
-    title: "📖 Study Center Mission",
-    text: "Ask the tutor where you can study English and ask what study materials are available.",
-    goal: "Ask the tutor where you can study English and ask what study materials are available."
-  },
-  {
-    id: "study_center_2",
-    title: "📖 Study Center Mission",
-    text: "Ask the tutor about the best way to practice English speaking and ask for a study schedule.",
-    goal: "Ask the tutor about the best way to practice English speaking and ask for a study schedule."
-  },
-  {
-    id: "study_center_3",
-    title: "📖 Study Center Mission",
-    text: "Ask which books are good for beginner English learners and ask if you can borrow them.",
-    goal: "Ask which books are good for beginner English learners and ask if you can borrow them."
-  },
-  {
-    id: "study_center_4",
-    title: "📖 Study Center Mission",
-    text: "Ask the tutor how to improve your English vocabulary and ask for one useful study tip.",
-    goal: "Ask the tutor how to improve your English vocabulary and ask for one useful study tip."
-  }
-];
-
-const COMMUNITY_CENTER_MISSIONS = [
-  {
-    id: "community_center_1",
-    title: "🏛️ Community Center Mission",
-    text: "Ask the staff member where you can get a residence certificate and ask what document you need.",
-    goal: "Ask the staff member where you can get a residence certificate and ask what document you need."
-  },
-  {
-    id: "community_center_2",
-    title: "🏛️ Community Center Mission",
-    text: "Ask about a local community program and ask when it takes place.",
-    goal: "Ask about a local community program and ask when it takes place."
-  },
-  {
-    id: "community_center_3",
-    title: "🏛️ Community Center Mission",
-    text: "Ask how to get a local resident registration document and ask about the processing time.",
-    goal: "Ask how to get a local resident registration document and ask about the processing time."
-  },
-  {
-    id: "community_center_4",
-    title: "🏛️ Community Center Mission",
-    text: "Ask what services the community center provides and ask which service is useful for new residents.",
-    goal: "Ask what services the community center provides and ask which service is useful for new residents."
-  }
-];
-
-const CAREER_CENTER_MISSIONS = [
-  {
-    id: "career_center_1",
-    title: "💼 Career Center Mission",
-    text: "Ask the career counselor about finding a part-time job and ask what kind of jobs are available.",
-    goal: "Ask the career counselor about finding a part-time job and ask what kind of jobs are available."
-  },
-  {
-    id: "career_center_2",
-    title: "💼 Career Center Mission",
-    text: "Ask how to prepare a resume and ask what information should be included.",
-    goal: "Ask how to prepare a resume and ask what information should be included."
-  },
-  {
-    id: "career_center_3",
-    title: "💼 Career Center Mission",
-    text: "Ask for advice about a job interview and ask what you should do before the interview.",
-    goal: "Ask for advice about a job interview and ask what you should do before the interview."
-  },
-  {
-    id: "career_center_4",
-    title: "💼 Career Center Mission",
-    text: "Ask about job training programs and ask how to apply for one.",
-    goal: "Ask about job training programs and ask how to apply for one."
-  }
-];
-
-const ACTIVITY_CENTER_MISSIONS = [
-  {
-    id: "activity_center_1",
-    title: "🎨 Activity Center Mission",
-    text: "Ask the coordinator what community activities are available and ask when the English club meets.",
-    goal: "Ask the coordinator what community activities are available and ask when the English club meets."
-  },
-  {
-    id: "activity_center_2",
-    title: "🎨 Activity Center Mission",
-    text: "Ask about an art class and ask what materials you need to bring.",
-    goal: "Ask about an art class and ask what materials you need to bring."
-  },
-  {
-    id: "activity_center_3",
-    title: "🎨 Activity Center Mission",
-    text: "Ask about a cooking class and ask how much it costs to join.",
-    goal: "Ask about a cooking class and ask how much it costs to join."
-  },
-  {
-    id: "activity_center_4",
-    title: "🎨 Activity Center Mission",
-    text: "Ask which activity is good for meeting new people and ask when the next activity starts.",
-    goal: "Ask which activity is good for meeting new people and ask when the next activity starts."
-  }
-];
-
-const MULTI_PURPOSE_HALL_MISSIONS = [
-  {
-    id: "multi_purpose_hall_1",
-    title: "🏛️ Multi-Purpose Hall Mission",
-    text: "Ask the coordinator what events are held in the hall and ask when the next community meeting is.",
-    goal: "Ask the coordinator what events are held in the hall and ask when the next community meeting is."
-  },
-  {
-    id: "multi_purpose_hall_2",
-    title: "🏛️ Multi-Purpose Hall Mission",
-    text: "Ask about the English presentation and ask what time it starts.",
-    goal: "Ask about the English presentation and ask what time it starts."
-  },
-  {
-    id: "multi_purpose_hall_3",
-    title: "🏛️ Multi-Purpose Hall Mission",
-    text: "Ask about a resident workshop and ask what you need to bring.",
-    goal: "Ask about a resident workshop and ask what you need to bring."
-  },
-  {
-    id: "multi_purpose_hall_4",
-    title: "🏛️ Multi-Purpose Hall Mission",
-    text: "Ask which event is good for meeting local residents and ask when it will happen.",
-    goal: "Ask which event is good for meeting local residents and ask when it will happen."
-  }
-];
-
-const getRandomMission = (missions, lastIndexRef) => {
-  let nextIndex = Math.floor(Math.random() * missions.length);
-  if (missions.length > 1 && nextIndex === lastIndexRef.current) {
-    nextIndex = (nextIndex + 1) % missions.length;
-  }
-  lastIndexRef.current = nextIndex;
-  return missions[nextIndex];
-};
-
-const NOVELTY_VOICE_NAMES = [
-  "albert",
-  "bad news",
-  "bahh",
-  "bells",
-  "boing",
-  "bubbles",
-  "cellos",
-  "deranged",
-  "good news",
-  "hysterical",
-  "junior",
-  "pipe organ",
-  "trinoids",
-  "whisper",
-  "zarvox",
-  "kathy",
-  "ralph"
-];
-
-const isMaleVoice = (v) => {
-  const name = (v.name || "").toLowerCase();
-  return /\b(alex|daniel|tom|oliver|guy|david|george|christopher|aaron|fred|male)\b/i.test(name);
-};
-
-const isFemaleVoice = (v) => {
-  const name = (v.name || "").toLowerCase();
-  return (
-    /\b(samantha|ava|allison|susan|zoe|karen|victoria|fiona|jenny|aria|female)\b/i.test(name) ||
-    name.includes("google us english")
-  );
-};
-
-const scoreQuality = (v) => {
-  const nameLower = (v.name || "").toLowerCase();
-  const langLower = (v.lang || "").toLowerCase();
-
-  // Deprioritize novelty/robotic toy voices
-  if (NOVELTY_VOICE_NAMES.some((n) => nameLower.includes(n))) {
-    return -50;
-  }
-
-  let score = 10;
-
-  // Quality keywords
-  if (nameLower.includes("natural")) score += 60;
-  if (nameLower.includes("enhanced")) score += 50;
-  if (nameLower.includes("premium")) score += 50;
-  if (nameLower.includes("google")) score += 40;
-
-  // Preferred accents
-  if (langLower.startsWith("en-us") || langLower === "en_us") score += 20;
-  else if (langLower.startsWith("en-gb") || langLower === "en_gb") score += 10;
-
-  if (v.default) score += 5;
-
-  return score;
-};
-
-const getBestEnglishVoice = (voices, npcName) => {
-  if (!voices || voices.length === 0) return null;
-
-  const englishVoices = voices.filter(
-    (v) =>
-      v.lang &&
-      (v.lang.toLowerCase().startsWith("en") ||
-        v.lang.toLowerCase().includes("en-") ||
-        v.lang.toLowerCase().includes("en_"))
-  );
-
-  if (englishVoices.length === 0) {
-    return voices.find((v) => v.default) || voices[0] || null;
-  }
-
-  const isJack =
-    npcName === "Shop Seller" ||
-    npcName === "Bank Employee" ||
-    npcName === "Police Officer" ||
-    npcName === "Officer Alex" ||
-    npcName === "Alex" ||
-    npcName === "Tutor Daniel" ||
-    npcName === "Daniel" ||
-    npcName === "Career Counselor James" ||
-    npcName === "James";
-  const isFemale =
-    npcName === "Cafe Barista" ||
-    npcName === "Hotel Receptionist" ||
-    npcName === "Sarah" ||
-    npcName === "Librarian" ||
-    npcName === "Emily" ||
-    npcName === "Teacher Olivia" ||
-    npcName === "Olivia" ||
-    npcName === "Staff Mina" ||
-    npcName === "Mina" ||
-    npcName === "Coordinator Hana" ||
-    npcName === "Hana" ||
-    npcName === "Coordinator Yuri" ||
-    npcName === "Yuri";
-
-  if (isJack) {
-    // 1. Prefer male English voices, sorted by quality
-    const maleVoices = englishVoices.filter(isMaleVoice);
-    if (maleVoices.length > 0) {
-      maleVoices.sort((a, b) => scoreQuality(b) - scoreQuality(a));
-      return maleVoices[0];
-    }
-
-    // 2. If no male voice exists, prefer non-female English voices
-    const nonFemaleVoices = englishVoices.filter((v) => !isFemaleVoice(v));
-    if (nonFemaleVoices.length > 0) {
-      nonFemaleVoices.sort((a, b) => scoreQuality(b) - scoreQuality(a));
-      return nonFemaleVoices[0];
-    }
-
-    // 3. Fallback to best overall English voice
-    englishVoices.sort((a, b) => scoreQuality(b) - scoreQuality(a));
-    return englishVoices[0];
-  }
-
-  if (isFemale) {
-    // 1. Prefer female English voices, sorted by quality
-    const femaleVoices = englishVoices.filter(isFemaleVoice);
-    if (femaleVoices.length > 0) {
-      femaleVoices.sort((a, b) => scoreQuality(b) - scoreQuality(a));
-      return femaleVoices[0];
-    }
-
-    // 2. Fallback to best overall English voice
-    englishVoices.sort((a, b) => scoreQuality(b) - scoreQuality(a));
-    return englishVoices[0];
-  }
-
-  // Generic / default
-  englishVoices.sort((a, b) => scoreQuality(b) - scoreQuality(a));
-  return englishVoices[0];
-};
 
 function App() {
   const [authUser, setAuthUser] = useState(null);
@@ -557,9 +133,52 @@ function App() {
   const [activeMission, setActiveMission] = useState(null);
   const [exitEvaluation, setExitEvaluation] = useState(null);
   const [isProgressPanelOpen, setIsProgressPanelOpen] = useState(false);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [localInterfaceLanguage, setLocalInterfaceLanguage] = useState(null);
+  const resolvedPrefs = resolveUserLanguagePreferences(userProfile);
+  const interfaceLanguage = localInterfaceLanguage || resolvedPrefs.interfaceLanguage;
+  const setInterfaceLanguage = setLocalInterfaceLanguage;
+  const learningLanguage = resolvedPrefs.learningLanguage;
+  const learningLevel = resolvedPrefs.learningLevel;
+
+  const learningLanguageRef = useRef(learningLanguage);
+  useEffect(() => {
+    learningLanguageRef.current = learningLanguage;
+  }, [learningLanguage]);
+
+  const learningLevelRef = useRef(learningLevel);
+  useEffect(() => {
+    learningLevelRef.current = learningLevel;
+  }, [learningLevel]);
+  const [itemPrompt, setItemPrompt] = useState(null);
+  const [inventory, setInventory] = useState({});
+  const [collectedItemIds, setCollectedItemIds] = useState([]);
+  const [pickupToast, setPickupToast] = useState(null);
+
+  const inventoryRef = useRef(inventory);
+  useEffect(() => {
+    inventoryRef.current = inventory;
+  }, [inventory]);
+
+  const collectedItemIdsRef = useRef(collectedItemIds);
+  useEffect(() => {
+    collectedItemIdsRef.current = collectedItemIds;
+  }, [collectedItemIds]);
+
+  const pickupToastTimeoutRef = useRef(null);
 
   const currentMissionRef = useRef(null);
+  const messagesHistoryRef = useRef([]);
+
+  // Dynamically re-localize activeMission if interface language switches during a mission
+  useEffect(() => {
+    if (currentMissionRef.current) {
+      setActiveMission(getLocalizedMission(currentMissionRef.current, interfaceLanguage));
+    }
+  }, [interfaceLanguage]);
+
   const lastShopMissionIndexRef = useRef(-1);
+  const recentShopMissionIdsRef = useRef([]);
   const lastCafeMissionIndexRef = useRef(-1);
   const lastHotelMissionIndexRef = useRef(-1);
   const lastHospitalMissionIndexRef = useRef(-1);
@@ -590,8 +209,55 @@ function App() {
       if (saveBannerTimeoutRef.current) {
         clearTimeout(saveBannerTimeoutRef.current);
       }
+      if (pickupToastTimeoutRef.current) {
+        clearTimeout(pickupToastTimeoutRef.current);
+      }
     };
   }, []);
+
+  const isProgressPanelOpenRef = useRef(isProgressPanelOpen);
+  useEffect(() => {
+    isProgressPanelOpenRef.current = isProgressPanelOpen;
+  }, [isProgressPanelOpen]);
+
+  const isSettingsOpenRef = useRef(isSettingsOpen);
+  useEffect(() => {
+    isSettingsOpenRef.current = isSettingsOpen;
+  }, [isSettingsOpen]);
+
+  const exitEvaluationRef = useRef(exitEvaluation);
+  useEffect(() => {
+    exitEvaluationRef.current = exitEvaluation;
+  }, [exitEvaluation]);
+
+  // Global 'M' shortcut: toggle progress panel
+  useEffect(() => {
+    const handleGlobalKeyDown = (e) => {
+      if (e.isComposing || e.keyCode === 229) return;
+      if (e.ctrlKey || e.altKey || e.metaKey) return;
+
+      const targetTag = e.target?.tagName?.toLowerCase();
+      if (targetTag === "input" || targetTag === "textarea" || e.target?.isContentEditable) {
+        return;
+      }
+
+      if (e.code === "KeyM" || e.key === "m" || e.key === "M") {
+        if (!authUser || !isUserVerified(authUser) || !userProfile?.learningPreferences) {
+          return;
+        }
+        if (exitEvaluationRef.current || isSettingsOpenRef.current) {
+          return;
+        }
+
+        setIsProgressPanelOpen((prev) => !prev);
+      }
+    };
+
+    window.addEventListener("keydown", handleGlobalKeyDown);
+    return () => {
+      window.removeEventListener("keydown", handleGlobalKeyDown);
+    };
+  }, [authUser, userProfile]);
 
   const generateAttemptId = () => {
     if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
@@ -603,10 +269,64 @@ function App() {
   const startNewMissionAttempt = (mission) => {
     currentAttemptIdRef.current = generateAttemptId();
     currentMissionRef.current = mission;
-    setActiveMission(mission);
+    setActiveMission(getLocalizedMission(mission, interfaceLanguage));
   };
 
-  const messagesHistoryRef = useRef([]);
+  const handleUpdateSettings = async ({
+    interfaceLanguage: nextInterface,
+    learningLanguage: nextLearning,
+    learningLevel: nextLevel
+  }) => {
+    setInterfaceLanguage(nextInterface);
+    learningLanguageRef.current = nextLearning;
+    learningLevelRef.current = nextLevel;
+
+    setUserProfile((prev) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        interfaceLanguage: nextInterface,
+        learningPreferences: {
+          ...(prev.learningPreferences || {}),
+          language: nextLearning,
+          learningLanguage: nextLearning,
+          level: nextLevel
+        }
+      };
+    });
+
+    if (currentMissionRef.current) {
+      setActiveMission(getLocalizedMission(currentMissionRef.current, nextInterface));
+    }
+
+    // When the learning language itself is changed, reset dialogue history to prevent mixing languages
+    if (nextLearning !== learningLanguage) {
+      if (dialogState.isOpen && dialogState.npcName) {
+        const newGreeting = getNPCInitialGreeting(dialogState.npcName, nextLearning);
+        messagesHistoryRef.current = [{ sender: "npc", text: newGreeting }];
+        setDialogState((prev) => ({
+          ...prev,
+          status: "idle",
+          messages: [{ sender: "npc", text: newGreeting }]
+        }));
+      } else {
+        messagesHistoryRef.current = [];
+      }
+    }
+
+    if (authUser?.uid) {
+      await updateUserProfile(authUser.uid, {
+        interfaceLanguage: nextInterface,
+        learningPreferences: {
+          ...(userProfile?.learningPreferences || {}),
+          language: nextLearning,
+          learningLanguage: nextLearning,
+          level: nextLevel
+        }
+      });
+    }
+  };
+
   const playerRef = useRef(null);
   const cameraAnglesRef = useRef({
     theta: Math.PI,
@@ -621,12 +341,28 @@ function App() {
     messages: []
   });
 
-  // TTS
+  // TTS & STT Refs & State
   const voicesRef = useRef([]);
   const ttsTimeoutRef = useRef(null);
+  const activeUtteranceRef = useRef(null);
+  const ttsSafetyTimeoutRef = useRef(null);
+  const [sttInterimText, setSttInterimText] = useState("");
+  const messagesEndRef = useRef(null);
+  const recognitionRef = useRef(null);
+  const handleUserSpeechRef = useRef(null);
+  const speechSessionIdRef = useRef(0);
+  const speechSessionSubmittedRef = useRef(false);
+  const accumulatedFinalTranscriptRef = useRef("");
+  const currentInterimTranscriptRef = useRef("");
+  const silenceTimerRef = useRef(null);
+  const lastSubmittedSpeechRef = useRef({ text: "", timestamp: 0 });
+  const isGeneratingRef = useRef(false);
+  const [voiceFeedback, setVoiceFeedback] = useState(null);
+  const [replayingMessageIndex, setReplayingMessageIndex] = useState(null);
+  const speakTextRef = useRef(null);
 
-  const speakText = (text, npcName = null) => {
-    if (!("speechSynthesis" in window)) {
+  const speakText = (text, npcName = null, ttsSource = "npc_dialogue", initialTrace = null) => {
+    if (typeof window === "undefined" || !("speechSynthesis" in window)) {
       setDialogState((prev) => ({ ...prev, status: "idle" }));
       return;
     }
@@ -635,122 +371,322 @@ function App() {
       clearTimeout(ttsTimeoutRef.current);
       ttsTimeoutRef.current = null;
     }
-
-    window.speechSynthesis.cancel();
-    const utterance = new SpeechSynthesisUtterance(text);
-    const character = npcName || dialogState.npcName;
-
-    utterance.rate = 1.0;
-    if (
-      character === "Shop Seller" ||
-      character === "Bank Employee" ||
-      character === "Police Officer" ||
-      character === "Officer Alex" ||
-      character === "Alex" ||
-      character === "Tutor Daniel" ||
-      character === "Daniel" ||
-      character === "Career Counselor James" ||
-      character === "James"
-    ) {
-      utterance.pitch = 1.0;
-    } else if (
-      character === "Cafe Barista" ||
-      character === "Hotel Receptionist" ||
-      character === "Sarah" ||
-      character === "Librarian" ||
-      character === "Emily" ||
-      character === "Teacher Olivia" ||
-      character === "Olivia" ||
-      character === "Staff Mina" ||
-      character === "Mina" ||
-      character === "Coordinator Hana" ||
-      character === "Hana" ||
-      character === "Coordinator Yuri" ||
-      character === "Yuri"
-    ) {
-      utterance.pitch = 1.04;
-    } else {
-      utterance.pitch = 1.0;
+    if (ttsSafetyTimeoutRef.current) {
+      clearTimeout(ttsSafetyTimeoutRef.current);
+      ttsSafetyTimeoutRef.current = null;
     }
 
+    // Stop active speech recognition before NPC TTS begins to avoid acoustic feedback
+    if (recognitionRef.current) {
+      try {
+        recognitionRef.current.abort();
+      } catch {
+        // Safe ignore if already stopped
+      }
+    }
+
+    // Unpause speech engine if browser paused it after a previous interruption
+    if (window.speechSynthesis.paused) {
+      try {
+        window.speechSynthesis.resume();
+      } catch {}
+    }
+
+    // Cancel ongoing speech only if speaking or pending to prevent accidental cancellation of new utterances
+    if (window.speechSynthesis.speaking || window.speechSynthesis.pending) {
+      try {
+        window.speechSynthesis.cancel();
+      } catch {}
+    }
+
+    const cleanSpeechText = sanitizeSpeechText(text);
+    const speechContent = cleanSpeechText || text || "";
+
+    const character = npcName || dialogState.npcName || "Shop Seller";
+    const currentLearningLang = learningLanguageRef.current || learningLanguage || "en";
+    const npcVoiceGender = getNPCGender(character);
+    const profile = getNPCProfile(character);
+    const displayName = profile?.name || character || "Unknown";
+
+    const trace = initialTrace
+      ? { ...initialTrace }
+      : {
+          displayName,
+          internalId: character,
+          gender: npcVoiceGender,
+          profileResolved: Boolean(profile),
+          handlerEntered: true,
+          dialogOpened: dialogState.isOpen,
+          greetingGenerated: ttsSource === "initial_greeting",
+          greetingText: ttsSource === "initial_greeting" ? speechContent : "",
+          aiRequestStarted: ttsSource === "ai_response",
+          aiResponseReceived: ttsSource === "ai_response",
+          displayedText: speechContent,
+          speakTextCalled: true,
+          ttsSource,
+          ttsText: speechContent,
+          voiceSelected: "",
+          utteranceLanguage: currentLearningLang === "ko" ? "ko-KR" : "en-US",
+          playbackStarted: false,
+          playbackEnded: false,
+          playbackError: null,
+          abortedAt: null
+        };
+
+    if (!speechContent) {
+      trace.abortedAt = "empty_speech_content";
+      console.log(formatInteractionTrace(trace));
+      setDialogState((prev) => (prev.status === "speaking" ? { ...prev, status: "idle" } : prev));
+      return;
+    }
+
+    const utterance = new SpeechSynthesisUtterance(speechContent);
+    activeUtteranceRef.current = utterance;
+
+    // Retain global reference on window to prevent premature JavaScript garbage collection in Blink/WebKit
+    if (typeof window !== "undefined") {
+      window.__activeTTSUtterances = window.__activeTTSUtterances || new Set();
+      window.__activeTTSUtterances.add(utterance);
+    }
+
+    // Rate, Pitch, and Volume parameters
+    if (currentLearningLang === "ko") {
+      // Conservative natural defaults for Korean learners: rate 0.90, natural pitch
+      utterance.rate = 0.90;
+      utterance.volume = 1.0;
+      utterance.pitch = npcVoiceGender === "female" ? 1.02 : 0.98;
+      utterance.lang = "ko-KR";
+    } else {
+      utterance.rate = 1.0;
+      utterance.volume = 1.0;
+      utterance.pitch = npcVoiceGender === "female" ? 1.04 : 1.0;
+      utterance.lang = "en-US";
+    }
+
+    // Voice resolution with fallback safety
     const availableVoices =
-      voicesRef.current.length > 0
+      voicesRef.current && voicesRef.current.length > 0
         ? voicesRef.current
-        : window.speechSynthesis.getVoices();
-    if (availableVoices && availableVoices.length > 0) {
+        : window.speechSynthesis.getVoices() || [];
+
+    if (availableVoices.length > 0) {
       voicesRef.current = availableVoices;
     }
 
-    const selectedVoice = getBestEnglishVoice(availableVoices, character);
-    if (selectedVoice) {
+    const selectedVoice = getBestVoiceForNPC(
+      availableVoices,
+      character,
+      currentLearningLang
+    );
+
+    if (currentLearningLang === "ko") {
+      // Strict Korean voice assignment: NEVER fall back to English voice in Korean mode
+      utterance.lang = "ko-KR";
+      if (selectedVoice && (selectedVoice.lang || "").toLowerCase().startsWith("ko")) {
+        utterance.voice = selectedVoice;
+      } else {
+        // Safe Korean fallback: find ANY available Korean voice
+        const anyKoVoice = availableVoices.find((v) =>
+          (v.lang || "").toLowerCase().startsWith("ko")
+        );
+        if (anyKoVoice) {
+          utterance.voice = anyKoVoice;
+        }
+      }
+    } else if (selectedVoice) {
       utterance.voice = selectedVoice;
       utterance.lang = selectedVoice.lang || "en-US";
     } else {
       utterance.lang = "en-US";
     }
 
-    if (import.meta.env.DEV) {
-      const npcLabel =
-        character === "Shop Seller"
-          ? "Jack"
-          : character === "Hotel Receptionist"
-            ? "Emma"
-            : character === "Sarah"
-              ? "Sarah"
-              : character === "Bank Employee"
-                ? "David"
-                : character === "Librarian" || character === "Emily"
-                  ? "Emily"
-                  : character === "Police Officer" || character === "Officer Alex" || character === "Alex"
-                    ? "Alex"
-                    : character === "Cafe Barista"
-                ? "Mia"
-                : character || "Unknown";
+    const voiceDisplayName = utterance.voice ? utterance.voice.name : "System Default (ko-KR)";
+    trace.voiceSelected = voiceDisplayName;
+    trace.utteranceLanguage = utterance.lang;
+
+    // Diagnostic trace log
+    console.log(formatInteractionTrace(trace));
+
+    if (currentLearningLang === "ko") {
       console.log(
-        `[TTS]\nNPC: ${npcLabel}\nSelected voice: ${selectedVoice?.name || "Default"}\nLanguage: ${selectedVoice?.lang || utterance.lang}\nRate: ${utterance.rate}\nPitch: ${utterance.pitch}`
+        `[KOREAN TTS PLAYBACK]\nNPC: ${displayName}\nVoice: ${voiceDisplayName}\nLanguage: ${utterance.lang}\nText: ${speechContent}\nStatus: queued`
+      );
+    } else if (import.meta.env.DEV) {
+      console.log(
+        `[ENGLISH NPC VOICE]\nNPC: ${displayName}\nGender: ${npcVoiceGender}\nLearning Language: en\nSelected voice: ${voiceDisplayName}\nVoice language: ${utterance.lang}`
       );
     }
 
-    utterance.onstart = () => setDialogState((prev) => ({ ...prev, status: "speaking" }));
-    utterance.onend = () => setDialogState((prev) => ({ ...prev, status: "idle" }));
-    utterance.onerror = () => setDialogState((prev) => ({ ...prev, status: "idle" }));
+    const clearActiveUtterance = () => {
+      if (typeof window !== "undefined" && window.__activeTTSUtterances) {
+        window.__activeTTSUtterances.delete(utterance);
+      }
+      if (ttsSafetyTimeoutRef.current) {
+        clearTimeout(ttsSafetyTimeoutRef.current);
+        ttsSafetyTimeoutRef.current = null;
+      }
+      if (activeUtteranceRef.current === utterance) {
+        activeUtteranceRef.current = null;
+      }
+      setReplayingMessageIndex(null);
+    };
+
+    utterance.onstart = () => {
+      if (activeUtteranceRef.current !== utterance) return;
+
+      trace.playbackStarted = true;
+      console.log(formatInteractionTrace(trace));
+
+      if (currentLearningLang === "ko") {
+        console.log(
+          `[KOREAN TTS PLAYBACK]\nNPC: ${displayName}\nVoice: ${voiceDisplayName}\nLanguage: ${utterance.lang}\nText: ${speechContent}\nStatus: started`
+        );
+      }
+
+      setDialogState((prev) => {
+        if (prev.status !== "speaking") {
+          return { ...prev, status: "speaking" };
+        }
+        return prev;
+      });
+
+      // Safe fallback timeout to prevent permanent speaking state
+      if (ttsSafetyTimeoutRef.current) {
+        clearTimeout(ttsSafetyTimeoutRef.current);
+      }
+      const safeDurationMs = Math.max(8000, Math.ceil((speechContent.length / 10) * 1000) + 5000);
+      ttsSafetyTimeoutRef.current = setTimeout(() => {
+        ttsSafetyTimeoutRef.current = null;
+        if (activeUtteranceRef.current === utterance) {
+          clearActiveUtterance();
+          try {
+            window.speechSynthesis.cancel();
+          } catch {}
+          setDialogState((prev) => (prev.status === "speaking" ? { ...prev, status: "idle" } : prev));
+        }
+      }, safeDurationMs);
+    };
+
+    utterance.onend = () => {
+      if (activeUtteranceRef.current !== utterance) return;
+
+      trace.playbackEnded = true;
+      console.log(formatInteractionTrace(trace));
+
+      if (currentLearningLang === "ko") {
+        console.log(
+          `[KOREAN TTS PLAYBACK]\nNPC: ${displayName}\nVoice: ${voiceDisplayName}\nLanguage: ${utterance.lang}\nText: ${speechContent}\nStatus: ended`
+        );
+      }
+
+      clearActiveUtterance();
+      setDialogState((prev) => (prev.status === "speaking" ? { ...prev, status: "idle" } : prev));
+    };
+
+    utterance.onerror = (event) => {
+      if (activeUtteranceRef.current !== utterance) return;
+
+      trace.playbackError = event?.error || "unknown";
+      console.error(formatInteractionTrace(trace));
+
+      if (currentLearningLang === "ko") {
+        console.error(
+          `[KOREAN TTS PLAYBACK]\nNPC: ${displayName}\nVoice: ${voiceDisplayName}\nLanguage: ${utterance.lang}\nText: ${speechContent}\nStatus: error\nError: ${event?.error || "unknown"}`
+        );
+      }
+
+      clearActiveUtterance();
+      setDialogState((prev) => (prev.status === "speaking" ? { ...prev, status: "idle" } : prev));
+    };
 
     ttsTimeoutRef.current = setTimeout(() => {
       ttsTimeoutRef.current = null;
-      window.speechSynthesis.speak(utterance);
+      if (activeUtteranceRef.current === utterance) {
+        if (window.speechSynthesis.paused) {
+          try {
+            window.speechSynthesis.resume();
+          } catch {}
+        }
+        try {
+          window.speechSynthesis.speak(utterance);
+        } catch (speakErr) {
+          trace.playbackError = speakErr?.message || "speak_exception";
+          trace.abortedAt = "speak_failed";
+          console.error(formatInteractionTrace(trace));
+          console.error("SpeechSynthesis.speak failed:", speakErr);
+          clearActiveUtterance();
+          setDialogState((prev) => (prev.status === "speaking" ? { ...prev, status: "idle" } : prev));
+        }
+      }
     }, 60);
   };
 
   useEffect(() => {
-    if (!("speechSynthesis" in window)) return;
+    speakTextRef.current = speakText;
+  });
+
+  useEffect(() => {
+    if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
 
     const updateVoices = () => {
-      const available = window.speechSynthesis.getVoices();
-      if (available && available.length > 0) {
-        voicesRef.current = available;
-      }
+      try {
+        const available = window.speechSynthesis.getVoices();
+        if (available && available.length > 0) {
+          voicesRef.current = available;
+        }
+      } catch {}
     };
 
     updateVoices();
-    window.speechSynthesis.onvoiceschanged = updateVoices;
+    window.speechSynthesis.addEventListener("voiceschanged", updateVoices);
+    if ("onvoiceschanged" in window.speechSynthesis) {
+      window.speechSynthesis.onvoiceschanged = updateVoices;
+    }
+
+    // Attach diagnostic utilities to window for dev inspection and testing
+    window.diagnoseKoreanTTS = (npcName = "Cafe Barista") => {
+      const diag = runKoreanTTSDiagnostics(voicesRef.current, { npcName });
+      console.table(diag);
+      return diag;
+    };
+    window.testKoreanTTSPlayback = (npcName = "Cafe Barista", text = "안녕하세요!") => {
+      speakTextRef.current?.(text, npcName);
+    };
 
     return () => {
+      window.speechSynthesis.removeEventListener("voiceschanged", updateVoices);
       if (window.speechSynthesis.onvoiceschanged === updateVoices) {
         window.speechSynthesis.onvoiceschanged = null;
       }
       if (ttsTimeoutRef.current) {
         clearTimeout(ttsTimeoutRef.current);
+        ttsTimeoutRef.current = null;
+      }
+      if (ttsSafetyTimeoutRef.current) {
+        clearTimeout(ttsSafetyTimeoutRef.current);
+        ttsSafetyTimeoutRef.current = null;
       }
     };
   }, []);
 
   // Groq AI
   const generateNPCResponseWithAI = async (userMessage, npc) => {
+    // Prevent concurrent/duplicate requests
+    if (isGeneratingRef.current) return;
+    isGeneratingRef.current = true;
+    setVoiceFeedback(null);
+
     setDialogState((prev) => ({ ...prev, status: "thinking" }));
     const apiKey = import.meta.env.VITE_GROQ_API_KEY;
 
     if (!apiKey) {
-      const warning = "Groq API key topilmadi. .env faylini tekshiring.";
+      isGeneratingRef.current = false;
+      setVoiceFeedback(mapSpeechErrorToFeedback("api_error", interfaceLanguage));
+      const currentLearningLang = learningLanguageRef.current || learningLanguage;
+      const warning =
+        currentLearningLang === "ko"
+          ? "죄송합니다. 현재 대화 서비스에 연결할 수 없습니다."
+          : "I apologize, but I cannot connect to the conversation service right now.";
       setDialogState((prev) => ({
         ...prev,
         status: "idle",
@@ -760,41 +696,26 @@ function App() {
       return;
     }
 
-    const systemPrompt =
-      npc === "Shop Seller"
-        ? `You are Jack, a lively shopkeeper in a 3D village store. Respond in 1-2 short conversational English sentences without quotes or markdown.`
-        : npc === "Hotel Receptionist"
-          ? `You are Emma, a friendly hotel receptionist in a small village hotel. Speak naturally in short conversational English sentences. Help guests with check-in, rooms, reservations, prices, and basic hotel questions. Do not use markdown or quotation marks.`
-          : npc === "Sarah"
-            ? `You are Sarah, a friendly hospital receptionist in a small village hospital. Help visitors with appointments, doctors, rooms, prices, directions, and basic hospital questions. Speak naturally in short conversational English sentences. Do not use markdown or quotation marks.`
-            : npc === "Bank Employee"
-              ? `You are David, a polite and professional bank employee at Village Bank. Speak naturally in 1-2 short conversational English sentences. Help customers with opening a bank account, money transfers, debit/credit cards, deposits, and account inquiries. Do not use markdown or quotation marks.`
-              : npc === "Librarian" || npc === "Emily"
-                ? `You are Emily, a friendly, patient, and helpful librarian at Village Library. Speak naturally in 1-2 short conversational English sentences. Help visitors find books, borrow language learning materials, locate sections, and get library cards. Do not use markdown or quotation marks.`
-                : npc === "Police Officer" || npc === "Officer Alex" || npc === "Alex"
-                  ? `You are Alex, a friendly and professional village police officer at Village Police Station. Speak clearly and simply in 1-2 short conversational English sentences suitable for language learners. Help citizens with reporting lost items (wallet, phone), emergency numbers (112 or 911), filing police reports, and safety advice. Do not use markdown or quotation marks.`
-                  : npc === "Teacher Olivia" || npc === "Olivia"
-                    ? `You are Olivia, a friendly English teacher at a small language school in a Korean village. Speak clearly and naturally using simple English appropriate for beginner/intermediate learners. Help the student complete the assigned mission. Do not reveal the mission answer directly. Ask natural follow-up questions when appropriate.`
-                    : npc === "Tutor Daniel" || npc === "Daniel"
-                      ? `You are Daniel, a friendly tutor at a small study center in a Korean village. You help students learn English and develop good study habits. Speak clearly and naturally using simple English appropriate for beginner/intermediate learners. Help the student complete the assigned mission without directly giving them the answer. Ask natural follow-up questions when appropriate.`
-                      : npc === "Staff Mina" || npc === "Mina"
-                        ? `You are Mina, a friendly staff member at a small Korean village community center. You help residents understand local administrative services, certificates, community programs, and neighborhood information. Speak clearly and naturally using simple English suitable for beginner/intermediate learners. Help the student complete the assigned mission without directly giving the mission answer immediately. Ask natural follow-up questions when appropriate.`
-                        : npc === "Career Counselor James" || npc === "James"
-                          ? `You are James, a friendly career counselor at a small employment support center in a Korean village. You help visitors with job searching, resumes, interviews, training programs, and career planning. Speak clearly and naturally using simple English suitable for beginner/intermediate learners. Help the student complete the assigned mission without directly giving the mission answer immediately. Ask natural follow-up questions when appropriate.`
-                          : npc === "Coordinator Hana" || npc === "Hana"
-                            ? `You are Hana, a friendly activity coordinator at a small Korean village community center. You organize hobby classes, language clubs, workshops, and community activities. Speak clearly and naturally using simple English suitable for beginner/intermediate learners. Help the student complete the assigned mission without directly giving the answer immediately. Ask natural follow-up questions when appropriate.`
-                            : npc === "Coordinator Yuri" || npc === "Yuri"
-                              ? `You are Yuri, a friendly community event coordinator at a small Korean village multi-purpose hall. You organize community events, lectures, workshops, presentations, and resident meetings. Speak clearly and naturally using simple English suitable for beginner/intermediate learners. Help the student complete the assigned mission without directly giving the answer immediately. Ask natural follow-up questions when appropriate.`
-                              : `You are Mia, a friendly cafe barista in a 3D village cafe. Respond in 1-2 short conversational English sentences without quotes or markdown.`;
+    const currentLearningLang = learningLanguageRef.current || learningLanguage;
+    const currentLearningLevel = learningLevelRef.current || learningLevel;
+
+    const systemPrompt = buildNPCSystemPrompt({
+      npcName: npc,
+      activeMission: currentMissionRef.current || activeMission,
+      learningLanguage: currentLearningLang,
+      learningLevel: currentLearningLevel,
+      inventory: inventoryRef.current
+    });
+
+    const history = formatConversationHistory(messagesHistoryRef.current, 10);
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 15000);
 
     try {
-      const history = messagesHistoryRef.current.slice(-4).map((m) => ({
-        role: m.sender === "user" ? "user" : "assistant",
-        content: m.text
-      }));
-
       const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
         method: "POST",
+        signal: controller.signal,
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${apiKey.trim()}`
@@ -805,36 +726,69 @@ function App() {
             { role: "system", content: systemPrompt },
             ...history
           ],
-          max_tokens: 250,
-          temperature: 0.8
+          max_tokens: 180,
+          temperature: 0.5
         })
       });
 
+      clearTimeout(timeoutId);
+
       const data = await response.json();
-      if (!response.ok || data.error) throw new Error(data?.error?.message || "API xatosi");
+      if (!response.ok || data.error) throw new Error(data?.error?.message || "AI API error");
 
-      const reply = data?.choices?.[0]?.message?.content?.trim();
-      if (!reply) throw new Error("Bo'sh javob");
+      let rawReply = data?.choices?.[0]?.message?.content?.trim();
+      const plan = handleAIResponse({
+        rawReply,
+        npcName: npc,
+        learningLanguage: currentLearningLang
+      });
 
-      messagesHistoryRef.current.push({ sender: "npc", text: reply });
+      messagesHistoryRef.current.push({ sender: "npc", text: plan.reply });
       setDialogState((prev) => ({
         ...prev,
         status: "idle",
-        messages: [...prev.messages, { sender: "npc", text: reply }]
+        messages: [...prev.messages, { sender: "npc", text: plan.reply }]
       }));
 
-      speakText(reply, npc);
+      speakText(plan.textToSpeak, npc, plan.ttsSource, plan.trace);
     } catch (error) {
-      console.error(error);
-      const errorMsg = "Sorry, could you repeat that please?";
-      messagesHistoryRef.current.push({ sender: "npc", text: errorMsg });
+      clearTimeout(timeoutId);
+      console.error("Groq AI Error:", error);
+      const isTimeout = error.name === "AbortError";
+      setVoiceFeedback(mapSpeechErrorToFeedback(isTimeout ? "timeout" : "api_error", interfaceLanguage));
+      const currentLearningLang = learningLanguageRef.current || learningLanguage;
+      const plan = handleAIResponse({
+        rawReply: null,
+        npcName: npc,
+        learningLanguage: currentLearningLang
+      });
+      // Notice: Do NOT push errorMsg into messagesHistoryRef.current to avoid polluting history!
       setDialogState((prev) => ({
         ...prev,
         status: "idle",
-        messages: [...prev.messages, { sender: "npc", text: errorMsg }]
+        messages: [...prev.messages, { sender: "npc", text: plan.reply }]
       }));
-      speakText(errorMsg, npc);
+      speakText(plan.textToSpeak, npc, plan.ttsSource, plan.trace);
+    } finally {
+      isGeneratingRef.current = false;
     }
+  };
+
+  const getExaminerNpcTitle = (doorType, lang) => {
+    const isKo = lang === "ko";
+    if (doorType === "Exit Shop") return isKo ? "상점 직원 잭" : "Shop Seller Jack";
+    if (doorType === "Exit Hotel") return isKo ? "호텔 리셉셔니스트 엠마" : "Hotel Receptionist Emma";
+    if (doorType === "Exit Hospital") return isKo ? "병원 접수원 사라" : "Receptionist Sarah";
+    if (doorType === "Exit Bank") return isKo ? "은행원 데이비드" : "Bank Employee David";
+    if (doorType === "Exit Library") return isKo ? "사서 에밀리" : "Librarian Emily";
+    if (doorType === "Exit Police Station") return isKo ? "경찰관 알렉스" : "Police Officer Alex";
+    if (doorType === "Exit Language School") return isKo ? "어학당 교사 올리비아" : "Language Teacher Olivia";
+    if (doorType === "Exit Study Center") return isKo ? "스터디 센터 튜터 대니얼" : "Study Center Tutor Daniel";
+    if (doorType === "Exit Community Center") return isKo ? "커뮤니티 센터 직원 미나" : "Community Center Staff Mina";
+    if (doorType === "Exit Career Center") return isKo ? "취업 지원관 제임스" : "Career Counselor James";
+    if (doorType === "Exit Activity Center") return isKo ? "액티비티 코디네이터 하나" : "Activity Coordinator Hana";
+    if (doorType === "Exit Multi-Purpose Hall") return isKo ? "다목적 홀 코디네이터 유리" : "Multi-Purpose Hall Coordinator Yuri";
+    return isKo ? "바리스타 미아" : "Barista Mia";
   };
 
   // evaluateOnExit
@@ -842,114 +796,99 @@ function App() {
     if (isEvaluatingRef.current) return;
     isEvaluatingRef.current = true;
 
+    const uiLang = interfaceLanguage === "ko" ? "ko" : "en";
+    const learningLang = (learningLanguageRef.current || learningLanguage) === "ko" ? "ko" : "en";
+    const npcTitle = getExaminerNpcTitle(doorType, uiLang);
+
     try {
       const apiKey = import.meta.env.VITE_GROQ_API_KEY;
-
       const isShop = doorType === "Exit Shop";
-      const isHotel = doorType === "Exit Hotel";
-      const isHospital = doorType === "Exit Hospital";
-      const isBank = doorType === "Exit Bank";
-      const isLibrary = doorType === "Exit Library";
-      const isPolice = doorType === "Exit Police Station";
-      const isLanguageSchool = doorType === "Exit Language School";
-      const isStudyCenter = doorType === "Exit Study Center";
-      const isCommunityCenter = doorType === "Exit Community Center";
-      const isCareerCenter = doorType === "Exit Career Center";
-      const isActivityCenter = doorType === "Exit Activity Center";
-      const isMultiPurposeHall = doorType === "Exit Multi-Purpose Hall";
-
-      const npcTitle = isShop
-        ? "sotuvchi Jack"
-        : isHotel
-          ? "administrator Emma"
-          : isHospital
-            ? "qabulxona xodimi Sarah"
-            : isBank
-              ? "bank xodimi David"
-              : isLibrary
-                ? "kutubxonachi Emily"
-                : isPolice
-                  ? "politsiya xodimi Alex"
-                  : isLanguageSchool
-                    ? "o'qituvchi Olivia"
-                    : isStudyCenter
-                      ? "tyutor Daniel"
-                      : isCommunityCenter
-                        ? "markaz xodimi Mina"
-                        : isCareerCenter
-                          ? "maslahatchi James"
-                          : isActivityCenter
-                            ? "koordinator Hana"
-                            : isMultiPurposeHall
-                              ? "koordinator Yuri"
-                              : "barista Mia";
 
       const userSpeeches = messagesHistoryRef.current.filter((m) => m.sender === "user");
 
       if (userSpeeches.length === 0) {
+        if (isShop) {
+          const invValidation = validateMissionInventory(
+            currentMissionRef.current || MISSIONS_CATALOG.Shop[0],
+            inventoryRef.current,
+            uiLang
+          );
+          const invStatusMsg = invValidation.isComplete
+            ? (uiLang === "ko"
+                ? "하지만 상점 직원 잭과 목표 언어로 대화하지 않았습니다."
+                : "However, you did not converse with seller Jack in the target language.")
+            : (uiLang === "ko"
+                ? "또한 진열대에서 필요한 물품을 가방에 담지 않았습니다."
+                : "Also, you have not collected the required items from the shelves.");
+          const reqSummary = formatInventorySummary(invValidation.requiredMap, uiLang);
+          const reqDetail = reqSummary ? ` (${reqSummary})` : "";
+          setExitEvaluation({
+            doorType,
+            score: invValidation.isComplete ? 35 : 0,
+            completed: false,
+            mistakes: [
+              uiLang === "ko"
+                ? `내부에서 ${npcTitle}와(과) 전혀 대화하지 않았습니다.`
+                : `You did not speak with ${npcTitle} inside.`
+            ],
+            feedback: uiLang === "ko"
+              ? `상점 미션을 완수하려면 잭과 대화하고 필요한 물품${reqDetail}을 챙기세요. ${invStatusMsg}`
+              : `To complete the shop mission, speak with Jack and collect the required items${reqDetail}. ${invStatusMsg}`
+          });
+          return;
+        }
+
         setExitEvaluation({
           doorType,
           score: 0,
           completed: false,
-          mistakes: [`Siz ichkarida ${npcTitle} bilan umuman inglizcha gaplashmadingiz.`],
-          feedback: "Vazifani bajarish uchun avval 'F' tugmasini bosib, kerakli narsalarni ingliz tilida so'rab ko'ring."
+          mistakes: [
+            uiLang === "ko"
+              ? `내부에서 ${npcTitle}와(과) 전혀 대화하지 않았습니다.`
+              : `You did not speak with ${npcTitle} inside.`
+          ],
+          feedback: uiLang === "ko"
+            ? "미션을 수행하려면 먼저 'F' 키를 눌러 필요한 내용을 대화해 보세요."
+            : "To complete the mission, first press 'F' to converse with the character."
         });
         return;
       }
 
       setExitEvaluation({ doorType, loading: true });
 
-      const defaultGoal = isShop
-        ? "Buy exactly 2 bottles of water and 1 apple."
-        : isHotel
-          ? "Book exactly one single room for two nights."
-          : isHospital
-            ? "Make a doctor's appointment and ask what time it is."
-            : isBank
-              ? "Ask about opening a bank account and ask what documents are needed."
-              : isLibrary
-                ? "Ask the librarian where the English learning books are and ask if you can borrow one."
-                : isPolice
-                  ? "Report a lost wallet and ask what information you need to provide."
-                  : isLanguageSchool
-                    ? "Introduce yourself to the teacher and ask about the English class schedule."
-                    : isStudyCenter
-                      ? "Ask the tutor where you can study English and ask what study materials are available."
-                      : isCommunityCenter
-                        ? "Ask the staff member where you can get a residence certificate and ask what document you need."
-                        : isCareerCenter
-                          ? "Ask the career counselor about finding a part-time job and ask what kind of jobs are available."
-                          : isActivityCenter
-                            ? "Ask the coordinator what community activities are available and ask when the English club meets."
-                            : isMultiPurposeHall
-                              ? "Ask the coordinator what events are held in the hall and ask when the next community meeting is."
-                              : "Order exactly 1 hot Americano and 1 croissant.";
-      const missionGoal = currentMissionRef.current?.goal || defaultGoal;
+      const missionGoal = currentMissionRef.current
+        ? getMissionGoal(currentMissionRef.current, learningLang)
+        : (learningLang === "ko" ? "목표 언어로 원활한 상황 대화를 수행하세요." : "Communicate naturally to complete your situational goal.");
 
       const conversationTranscript = messagesHistoryRef.current
         .map((m) => `${m.sender === "user" ? "Student (Spoken)" : "NPC"}: "${m.text}"`)
         .join("\n");
 
-      const evaluationSystemPrompt = `You are an English Speaking Examiner evaluating a student's LIVE SPOKEN conversation transcribed via Speech-to-Text (STT).
+      const examinerTargetLang = learningLang === "ko" ? "Korean" : "English";
+      const examinerFeedbackLang = uiLang === "ko" ? "Korean" : "English";
 
-Location: ${isShop ? "Grocery Store" : isHotel ? "Village Hotel" : isHospital ? "Village Hospital" : isBank ? "Village Bank" : isLibrary ? "Village Library" : isPolice ? "Village Police Station" : isLanguageSchool ? "Village Language School" : isStudyCenter ? "Village Study Center" : isCommunityCenter ? "Village Community Center" : isCareerCenter ? "Village Career Center" : isActivityCenter ? "Village Activity Center" : isMultiPurposeHall ? "Village Multi-Purpose Hall" : "Italian Cafe"}
-Assigned Mission: "${missionGoal}"
+      const evaluationSystemPrompt = `You are an expert ${examinerTargetLang} Speaking Examiner evaluating a student's LIVE SPOKEN conversation transcribed via Speech-to-Text (STT).
+
+Location: ${deriveFacilityName(doorType)}
+Target Learning Language: ${examinerTargetLang}
+Assigned Mission Goal: "${missionGoal}"
+Feedback Language: ${examinerFeedbackLang} (All feedback, notes, and explanations MUST be written in natural, fluent ${examinerFeedbackLang}!)
 
 Dialogue Transcript:
 ${conversationTranscript}
 
 CRITICAL RULES FOR SPOKEN EVALUATION:
-1. IGNORE CAPITALIZATION AND PUNCTUATION COMPLETELY: The user is speaking via microphone, so ignore lowercase letters (e.g. 'i want', 'apple', 'london') and missing periods/commas. NEVER count these as mistakes!
-2. FOCUS ONLY ON SPOKEN LANGUAGE:
-   - Did they ask for the assigned mission items clearly according to Assigned Mission ("${missionGoal}")?
-   - Real grammar errors (e.g. "I wants", "give me two apple", "I buy water") should be corrected.
-   - Natural spoken phrasing and politeness ("Could I have...", "Please", etc.).
-3. 'score': (Integer 0-100). High score (85-100) if items were asked correctly regardless of text case. Low score only for missing items, completely wrong vocabulary, or broken grammar.
-4. 'completed': (Boolean true/false). true if they completed the mission requirements.
-5. 'mistakes': Array of Uzbek feedback strings ONLY for real grammatical or lexical mistakes. Format:
-   "Siz aytdingiz: '[jumla]' ➔ To'g'risi: '[to'g'ri inglizcha variant]' (Izoh: qisqa o'zbekcha tushuntirish)"
+1. IGNORE CAPITALIZATION AND PUNCTUATION COMPLETELY: The user is speaking via microphone (STT). Ignore lowercase letters and missing periods/commas. NEVER penalize these!
+2. FOCUS ONLY ON SPOKEN LANGUAGE IN ${examinerTargetLang}:
+   - Did they address the assigned mission goal ("${missionGoal}") clearly?
+   - Real grammar errors, unnatural phrasings, or vocabulary slips in ${examinerTargetLang} should be corrected.
+   - Politeness and natural spoken style in ${examinerTargetLang} (e.g. polite 존댓말/해요체 in Korean, polite requests in English).
+3. 'score': (Integer 0-100). High score (85-100) if mission communication was successful and mostly accurate. Lower score only for missing required items/topics, severely broken grammar, or off-topic speech.
+4. 'completed': (Boolean true/false). true if the student fulfilled the mission requirements in ${examinerTargetLang}.
+5. 'mistakes': Array of feedback strings in ${examinerFeedbackLang} ONLY for real grammatical or lexical mistakes. Format:
+   ${uiLang === "ko" ? '"말씀하신 문장: \'[spoken sentence]\' ➔ 올바른 표현: \'[correct target phrase]\' (설명: [간결한 한국어 피드백])"' : '"You said: \'[spoken sentence]\' ➔ Better: \'[correct target phrase]\' (Note: [brief English explanation])"'}
    DO NOT include any mistake about capital letters or punctuation marks. If no real grammar mistake exists, return [].
-6. 'feedback': Short, positive summary in Uzbek.
+6. 'feedback': A concise, encouraging 1-2 sentence overall summary in ${examinerFeedbackLang}.
 
 CRITICAL: Return ONLY valid pure JSON without markdown backticks.
 JSON Schema:
@@ -957,7 +896,7 @@ JSON Schema:
   "score": 90,
   "completed": true,
   "mistakes": [],
-  "feedback": "Vazifani a'lo darajada bajardingiz..."
+  "feedback": "..."
 }`;
 
       const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
@@ -971,7 +910,7 @@ JSON Schema:
           messages: [
             {
               role: "system",
-              content: "You are a JSON-only generating assistant for spoken English analysis. Output pure JSON without markdown."
+              content: `You are a JSON-only generating assistant for spoken ${examinerTargetLang} analysis. Output pure JSON without markdown.`
             },
             {
               role: "user",
@@ -985,28 +924,81 @@ JSON Schema:
       const data = await response.json();
       let rawReply = data?.choices?.[0]?.message?.content?.trim();
 
-      if (!rawReply) throw new Error("Bo'sh javob qaytdi");
+      if (!rawReply) throw new Error("Empty response received from evaluation model");
 
       rawReply = rawReply.replace(/```json/gi, "").replace(/```/g, "").trim();
       const parsed = JSON.parse(rawReply);
 
+      const defaultSummary = uiLang === "ko" ? "대화 분석이 완료되었습니다." : "Conversation evaluation completed.";
+      let finalScore = typeof parsed.score === "number" ? parsed.score : 70;
+      let finalCompleted = Boolean(parsed.completed);
+      let finalMistakes = Array.isArray(parsed.mistakes) ? [...parsed.mistakes] : [];
+      let finalFeedback = parsed.feedback || defaultSummary;
+
+      if (isShop) {
+        const invValidation = validateMissionInventory(
+          currentMissionRef.current || MISSIONS_CATALOG.Shop[0],
+          inventoryRef.current,
+          uiLang
+        );
+
+        if (!invValidation.isComplete) {
+          finalCompleted = false;
+          if (invValidation.missingList.length > 0) {
+            const missingListText = invValidation.missingList
+              .map((m) => (uiLang === "ko" ? `${m.displayName} ${m.missing}개` : `${m.missing} ${m.displayName}`))
+              .join(", ");
+            finalMistakes.push(
+              uiLang === "ko"
+                ? `부족한 물품: 가방에 ${missingListText}가 부족합니다.`
+                : `Missing items: Your backpack is missing ${missingListText}.`
+            );
+            finalScore = Math.min(finalScore, 65);
+          }
+          if (invValidation.hasExtraItems && invValidation.excessList.length > 0) {
+            const excessListText = invValidation.excessList
+              .map((e) => (uiLang === "ko" ? `${e.displayName} ${e.excess}개` : `${e.excess} extra ${e.displayName}`))
+              .join(", ");
+            finalMistakes.push(
+              uiLang === "ko"
+                ? `초과 물품: 가방에 ${excessListText}가 초과되었습니다.`
+                : `Extra items: Your backpack has ${excessListText}.`
+            );
+            finalScore = Math.min(finalScore, 75);
+          }
+          finalFeedback += uiLang === "ko"
+            ? " (참고: 가방의 물품이 미션 요구 조건과 일치하지 않습니다)."
+            : " (Note: Backpack items did not fully match mission requirements).";
+        } else {
+          finalFeedback += uiLang === "ko"
+            ? " (가방에 필요한 모든 물품을 정확히 담았습니다)."
+            : " (All required items collected correctly in backpack).";
+        }
+      }
+
       setExitEvaluation({
         doorType,
         loading: false,
-        score: typeof parsed.score === "number" ? parsed.score : 70,
-        completed: Boolean(parsed.completed),
-        mistakes: Array.isArray(parsed.mistakes) ? parsed.mistakes : [],
-        feedback: parsed.feedback || "Suhbat tahlili yakunlandi."
+        score: finalScore,
+        completed: finalCompleted,
+        mistakes: finalMistakes,
+        feedback: finalFeedback
       });
     } catch (err) {
-      console.error("Tahlil xatosi:", err);
+      console.error("Evaluation error:", err);
       setExitEvaluation({
         doorType,
         loading: false,
         score: 50,
         completed: false,
-        mistakes: ["AI tahlilida texnik uzilish bo'ldi. Internetni tekshiring."],
-        feedback: "Javobni yuklashda xatolik yuz berdi."
+        mistakes: [
+          uiLang === "ko"
+            ? "AI 분석 연결 중 기술적 문제가 발생했습니다. 네트워크를 확인해주세요."
+            : "A temporary network issue occurred during AI analysis. Please check your connection."
+        ],
+        feedback: uiLang === "ko"
+          ? "평가 결과를 불러오는 중 오류가 발생했습니다."
+          : "An error occurred while generating the evaluation."
       });
     } finally {
       isEvaluatingRef.current = false;
@@ -1039,22 +1031,22 @@ JSON Schema:
       playerRef.current.position.set(5.0, 0, 13.0);
     } else if (doorType === "Exit Language School") {
       setCurrentLocation("outside");
-      playerRef.current.position.set(-14.4, 0, 32.5);
+      playerRef.current.position.set(-22.0, 0, 32.8);
     } else if (doorType === "Exit Study Center") {
       setCurrentLocation("outside");
-      playerRef.current.position.set(-7.5, 0, 32.5);
+      playerRef.current.position.set(-9.5, 0, 33.2);
     } else if (doorType === "Exit Community Center") {
       setCurrentLocation("outside");
-      playerRef.current.position.set(7.2, 0, 32.5);
+      playerRef.current.position.set(9.5, 0, 33.2);
     } else if (doorType === "Exit Career Center") {
       setCurrentLocation("outside");
-      playerRef.current.position.set(14.4, 0, 32.5);
+      playerRef.current.position.set(22.0, 0, 32.8);
     } else if (doorType === "Exit Activity Center") {
       setCurrentLocation("outside");
-      playerRef.current.position.set(-10.8, 0, 38.8);
+      playerRef.current.position.set(-16.0, 0, 43.8);
     } else if (doorType === "Exit Multi-Purpose Hall") {
       setCurrentLocation("outside");
-      playerRef.current.position.set(10.8, 0, 38.8);
+      playerRef.current.position.set(16.0, 0, 43.5);
     }
     playerRef.current.rotation.y = 0;
     cameraAnglesRef.current.theta = Math.PI;
@@ -1064,15 +1056,29 @@ JSON Schema:
 
   const formatSaveSuccessMessage = (result) => {
     if (result?.alreadyRecorded) {
-      return "Bu urinish avval saqlangan. Qayta XP berilmadi.";
+      return interfaceLanguage === "ko"
+        ? "이미 기록된 미션 시도입니다. 중복 XP는 지급되지 않습니다."
+        : "This attempt was already recorded. No duplicate XP awarded.";
     }
     const xpEarned = typeof result?.xpEarned === "number" ? result.xpEarned : 0;
     const totalXP = typeof result?.stats?.totalXP === "number" ? result.stats.totalXP : 0;
+    const newlyUnlocked = Array.isArray(result?.newlyUnlocked) ? result.newlyUnlocked : [];
+
+    let achMsg = "";
+    if (newlyUnlocked.length > 0) {
+      achMsg = interfaceLanguage === "ko"
+        ? ` 🏆 ${newlyUnlocked.length}개의 새로운 업적이 달성되었습니다!`
+        : ` 🏆 ${newlyUnlocked.length} new achievement(s) unlocked!`;
+    }
 
     if (xpEarned > 0) {
-      return `🎉 +${xpEarned} XP qo‘shildi! Jami: ${totalXP} XP`;
+      return interfaceLanguage === "ko"
+        ? `🎉 +${xpEarned} XP 획득! 총 ${totalXP} XP.${achMsg}`
+        : `🎉 +${xpEarned} XP earned! Total: ${totalXP} XP.${achMsg}`;
     }
-    return "📋 Vazifa natijasi saqlandi (+0 XP). To‘liq bajarish uchun qaytadan urinib ko‘ring!";
+    return interfaceLanguage === "ko"
+      ? `📋 미션 결과가 저장되었습니다 (+0 XP).${achMsg}`
+      : `📋 Mission result saved (+0 XP).${achMsg}`;
   };
 
   const confirmExitToOutside = async (doorType) => {
@@ -1087,7 +1093,13 @@ JSON Schema:
     const attemptId = currentAttemptIdRef.current || generateAttemptId();
     currentAttemptIdRef.current = attemptId;
 
-    const missionData = currentMissionRef.current || {
+    const activeLocMission = currentMissionRef.current
+      ? getLocalizedMission(currentMissionRef.current, interfaceLanguage)
+      : null;
+
+    const missionData = activeLocMission || {
+      id: "exit_mission",
+      facility: deriveFacilityName(doorType),
       title: `${deriveFacilityName(doorType)} Mission`,
       goal: ""
     };
@@ -1102,19 +1114,29 @@ JSON Schema:
         }
       : null;
 
+    const userTimeZone =
+      typeof Intl !== "undefined" && typeof Intl.DateTimeFormat === "function"
+        ? Intl.DateTimeFormat().resolvedOptions().timeZone
+        : null;
+
     if (uid && evaluationData) {
       try {
-        const result = await recordMissionProgress(uid, missionData, evaluationData, attemptId);
+        const result = await recordMissionProgress(uid, missionData, evaluationData, attemptId, userTimeZone);
         failedAttemptRef.current = null;
         if (isMountedRef.current) {
-          if (result?.stats) {
+          if (result) {
             setUserProfile((prev) => {
               if (!prev) return prev;
               return {
                 ...prev,
                 stats: {
                   ...(prev.stats || {}),
-                  ...result.stats
+                  ...(result.stats || {})
+                },
+                streak: result.streak || prev.streak || { current: 0, longest: 0, lastActiveDate: null },
+                achievements: {
+                  ...(prev.achievements || {}),
+                  ...(result.achievements || {})
                 }
               };
             });
@@ -1150,7 +1172,7 @@ JSON Schema:
           setSaveErrorBanner({
             success: false,
             canRetry: true,
-            message: err?.friendlyMessage || "Vazifa natijasini saqlashda xatolik yuz berdi."
+            message: err?.friendlyMessage || (interfaceLanguage === "ko" ? "미션 결과 저장 중 오류가 발생했습니다." : "Failed to persist mission progress.")
           });
         }
       }
@@ -1160,6 +1182,9 @@ JSON Schema:
       setIsSavingProgress(false);
       setExitEvaluation(null);
       setActiveMission(null);
+      setInventory({});
+      setCollectedItemIds([]);
+      setItemPrompt(null);
     }
     isSavingProgressRef.current = false;
 
@@ -1180,18 +1205,28 @@ JSON Schema:
       setIsRetryingSave(true);
     }
 
+    const userTimeZone =
+      typeof Intl !== "undefined" && typeof Intl.DateTimeFormat === "function"
+        ? Intl.DateTimeFormat().resolvedOptions().timeZone
+        : null;
+
     try {
-      const result = await recordMissionProgress(uid, mission, evaluation, attemptId);
+      const result = await recordMissionProgress(uid, mission, evaluation, attemptId, userTimeZone);
       failedAttemptRef.current = null;
       if (isMountedRef.current) {
-        if (result?.stats) {
+        if (result) {
           setUserProfile((prev) => {
             if (!prev) return prev;
             return {
               ...prev,
               stats: {
                 ...(prev.stats || {}),
-                ...result.stats
+                ...(result.stats || {})
+              },
+              streak: result.streak || prev.streak || { current: 0, longest: 0, lastActiveDate: null },
+              achievements: {
+                ...(prev.achievements || {}),
+                ...(result.achievements || {})
               }
             };
           });
@@ -1219,7 +1254,7 @@ JSON Schema:
         setSaveErrorBanner({
           success: false,
           canRetry: true,
-          message: err?.friendlyMessage || "Natijani saqlashda yana xatolik yuz berdi."
+          message: err?.friendlyMessage || (interfaceLanguage === "ko" ? "미션 결과 저장 중 다시 오류가 발생했습니다." : "Failed again to save mission progress.")
         });
       }
     } finally {
@@ -1231,12 +1266,39 @@ JSON Schema:
   };
 
   const closeDialog = () => {
+    isGeneratingRef.current = false;
+    setReplayingMessageIndex(null);
+    setVoiceFeedback(null);
     if (ttsTimeoutRef.current) {
       clearTimeout(ttsTimeoutRef.current);
       ttsTimeoutRef.current = null;
     }
-    if ("speechSynthesis" in window) window.speechSynthesis.cancel();
-    if (recognitionRef.current) recognitionRef.current.stop();
+    if (ttsSafetyTimeoutRef.current) {
+      clearTimeout(ttsSafetyTimeoutRef.current);
+      ttsSafetyTimeoutRef.current = null;
+    }
+    activeUtteranceRef.current = null;
+    if ("speechSynthesis" in window) {
+      try {
+        window.speechSynthesis.cancel();
+      } catch {}
+    }
+
+    // Cancel active silence timer and invalidate speech session
+    if (silenceTimerRef.current) {
+      clearTimeout(silenceTimerRef.current);
+      silenceTimerRef.current = null;
+    }
+    speechSessionSubmittedRef.current = true;
+    accumulatedFinalTranscriptRef.current = "";
+    currentInterimTranscriptRef.current = "";
+    setSttInterimText("");
+
+    if (recognitionRef.current) {
+      try {
+        recognitionRef.current.abort();
+      } catch {}
+    }
 
     setDialogState((prev) => ({
       ...prev,
@@ -1245,36 +1307,160 @@ JSON Schema:
     }));
   };
 
-  // STT
-  const recognitionRef = useRef(null);
-  const handleUserSpeechRef = useRef(null);
+  // STT Lifecycle & Session Tracking
+
+  // Auto-scroll chat window when new messages arrive or while user is speaking
+  useEffect(() => {
+    if (messagesEndRef.current && dialogState.isOpen) {
+      messagesEndRef.current.scrollIntoView({ behavior: "smooth" });
+    }
+  }, [dialogState.messages, dialogState.status, sttInterimText, dialogState.isOpen]);
+
+  // Exactly-once submission coordinator
+  const finalizeAndSubmitSpeech = (targetSessionId) => {
+    // 1. Guard against callbacks from an old/stale session
+    if (speechSessionIdRef.current !== targetSessionId) return;
+
+    // 2. Exactly-once submission guard
+    if (speechSessionSubmittedRef.current) return;
+
+    // 3. Clear silence timer
+    if (silenceTimerRef.current) {
+      clearTimeout(silenceTimerRef.current);
+      silenceTimerRef.current = null;
+    }
+
+    // 4. Assemble the complete transcript from final segments and interim hypothesis
+    const finalText = accumulatedFinalTranscriptRef.current.trim();
+    const interimText = currentInterimTranscriptRef.current.trim();
+    const fullTranscript = (finalText + (finalText && interimText ? " " : "") + interimText).trim();
+
+    // 5. If no audible speech was captured, reset cleanly without AI request
+    if (!fullTranscript) {
+      speechSessionSubmittedRef.current = true;
+      setSttInterimText("");
+      try {
+        recognitionRef.current?.stop();
+      } catch {}
+      setDialogState((prev) => (prev.status === "listening" ? { ...prev, status: "idle" } : prev));
+      return;
+    }
+
+    // 6. Block duplicate submissions within 2 seconds with identical text
+    const now = Date.now();
+    if (
+      lastSubmittedSpeechRef.current.text === fullTranscript &&
+      now - lastSubmittedSpeechRef.current.timestamp < 2000
+    ) {
+      speechSessionSubmittedRef.current = true;
+      setSttInterimText("");
+      try {
+        recognitionRef.current?.stop();
+      } catch {}
+      setDialogState((prev) => (prev.status === "listening" ? { ...prev, status: "idle" } : prev));
+      return;
+    }
+
+    // 7. Mark session submitted BEFORE dispatching to prevent duplicate triggers
+    speechSessionSubmittedRef.current = true;
+    lastSubmittedSpeechRef.current = { text: fullTranscript, timestamp: now };
+    setSttInterimText("");
+
+    // 8. Stop recognition audio capture cleanly
+    try {
+      recognitionRef.current?.stop();
+    } catch {}
+
+    // 9. Dispatch to AI handler
+    if (handleUserSpeechRef.current) {
+      handleUserSpeechRef.current(fullTranscript);
+    }
+  };
 
   useEffect(() => {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (SpeechRecognition) {
       const recognition = new SpeechRecognition();
-      recognition.continuous = false;
-      recognition.interimResults = false;
+      recognition.continuous = true;
+      recognition.interimResults = true;
       recognition.lang = "en-US";
 
       recognition.onresult = (event) => {
-        const userText = event.results[0][0].transcript;
-        if (handleUserSpeechRef.current) {
-          handleUserSpeechRef.current(userText);
+        if (speechSessionSubmittedRef.current) return;
+
+        const { finalTranscript, interimTranscript, fullTranscript } =
+          processSpeechRecognitionResults(event.results);
+
+        accumulatedFinalTranscriptRef.current = finalTranscript;
+        currentInterimTranscriptRef.current = interimTranscript;
+        setSttInterimText(fullTranscript);
+
+        // Reset silence timer on every speech event
+        if (silenceTimerRef.current) {
+          clearTimeout(silenceTimerRef.current);
+          silenceTimerRef.current = null;
+        }
+
+        // When words are present, debounce silence for 1600ms before auto-submitting
+        if (fullTranscript.length > 0) {
+          const currentSessionId = speechSessionIdRef.current;
+          silenceTimerRef.current = setTimeout(() => {
+            finalizeAndSubmitSpeech(currentSessionId);
+          }, 1600);
         }
       };
 
-      recognition.onerror = () => setDialogState((prev) => ({ ...prev, status: "idle" }));
-      recognition.onend = () => {
-        setDialogState((prev) => {
-          if (prev.status === "listening") return { ...prev, status: "idle" };
-          return prev;
-        });
+      recognition.onerror = (event) => {
+        if (silenceTimerRef.current) {
+          clearTimeout(silenceTimerRef.current);
+          silenceTimerRef.current = null;
+        }
+
+        const errType = event?.error;
+        if (errType && errType !== "no-speech") {
+          setVoiceFeedback(mapSpeechErrorToFeedback(errType));
+        }
+
+        // If we already accumulated speech before error occurred, finalize it
+        const currentText = (
+          accumulatedFinalTranscriptRef.current + " " + currentInterimTranscriptRef.current
+        ).trim();
+
+        if (!speechSessionSubmittedRef.current && currentText.length > 0) {
+          finalizeAndSubmitSpeech(speechSessionIdRef.current);
+        } else {
+          speechSessionSubmittedRef.current = true;
+          setSttInterimText("");
+          setDialogState((prev) => (prev.status === "listening" ? { ...prev, status: "idle" } : prev));
+        }
       };
+
+      recognition.onend = () => {
+        if (silenceTimerRef.current) {
+          clearTimeout(silenceTimerRef.current);
+          silenceTimerRef.current = null;
+        }
+
+        // If speech was captured and not yet submitted, finalize now
+        if (!speechSessionSubmittedRef.current) {
+          finalizeAndSubmitSpeech(speechSessionIdRef.current);
+        } else {
+          setSttInterimText("");
+        }
+
+        setDialogState((prev) => (prev.status === "listening" ? { ...prev, status: "idle" } : prev));
+      };
+
       recognitionRef.current = recognition;
 
       return () => {
-        recognition.stop();
+        if (silenceTimerRef.current) {
+          clearTimeout(silenceTimerRef.current);
+          silenceTimerRef.current = null;
+        }
+        try {
+          recognition.abort();
+        } catch {}
       };
     }
   }, []);
@@ -1293,23 +1479,151 @@ JSON Schema:
     handleUserSpeechRef.current = handleUserSpeech;
   });
 
-  const startListening = () => {
-    if (recognitionRef.current && dialogState.status === "idle") {
-      try {
-        setDialogState((prev) => ({ ...prev, status: "listening" }));
-        recognitionRef.current.start();
-      } catch {
-        setDialogState((prev) => ({ ...prev, status: "idle" }));
+  const handleReplaySpeech = (text, messageIndex) => {
+    const currentLearningLang = learningLanguageRef.current || learningLanguage;
+    const plan = handleReplayAction({
+      text,
+      messageIndex,
+      status: dialogState.status,
+      isGenerating: isGeneratingRef.current,
+      npcName: dialogState.npcName,
+      learningLanguage: currentLearningLang
+    });
+
+    if (!plan.allowed) {
+      if (plan.trace) console.log(formatInteractionTrace(plan.trace));
+      return;
+    }
+
+    // If currently listening, stop recognition cleanly without submitting
+    if (dialogState.status === "listening" || recognitionRef.current) {
+      if (silenceTimerRef.current) {
+        clearTimeout(silenceTimerRef.current);
+        silenceTimerRef.current = null;
       }
+      speechSessionSubmittedRef.current = true;
+      try {
+        recognitionRef.current?.abort();
+      } catch {}
+      setSttInterimText("");
+    }
+
+    setReplayingMessageIndex(plan.messageIndex);
+    speakText(plan.textToSpeak, dialogState.npcName, plan.ttsSource, plan.trace);
+  };
+
+  const startListening = () => {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    const canStart = canStartListening({
+      status: dialogState.status,
+      isGenerating: isGeneratingRef.current,
+      isRecognitionAvailable: Boolean(SpeechRecognition && recognitionRef.current)
+    });
+
+    if (!canStart.allowed) {
+      if (canStart.reason === "unsupported") {
+        setVoiceFeedback(mapSpeechErrorToFeedback("unsupported"));
+      }
+      return;
+    }
+
+    // 1. Cancel ongoing speech synthesis before starting STT to prevent acoustic feedback
+    if (ttsTimeoutRef.current) {
+      clearTimeout(ttsTimeoutRef.current);
+      ttsTimeoutRef.current = null;
+    }
+    if (ttsSafetyTimeoutRef.current) {
+      clearTimeout(ttsSafetyTimeoutRef.current);
+      ttsSafetyTimeoutRef.current = null;
+    }
+    activeUtteranceRef.current = null;
+    if ("speechSynthesis" in window) {
+      try {
+        window.speechSynthesis.cancel();
+      } catch {}
+    }
+    setReplayingMessageIndex(null);
+
+    // 2. Clear any lingering silence timer and feedback
+    if (silenceTimerRef.current) {
+      clearTimeout(silenceTimerRef.current);
+      silenceTimerRef.current = null;
+    }
+    setVoiceFeedback(null);
+
+    // 3. Reset session state
+    speechSessionIdRef.current += 1;
+    speechSessionSubmittedRef.current = false;
+    accumulatedFinalTranscriptRef.current = "";
+    currentInterimTranscriptRef.current = "";
+    setSttInterimText("");
+
+    // 4. Set language dynamically (English or Korean)
+    const targetLang = getSpeechRecognitionLanguage(learningLanguageRef.current || learningLanguage);
+    recognitionRef.current.lang = targetLang;
+
+    // 5. Start speech recognition safely
+    try {
+      setDialogState((prev) => ({ ...prev, status: "listening" }));
+      recognitionRef.current.start();
+    } catch (err) {
+      setDialogState((prev) => ({ ...prev, status: "idle" }));
+      setVoiceFeedback(mapSpeechErrorToFeedback(err?.error || "audio-capture"));
     }
   };
 
-  // Eshik bosilganda (E)
+  const stopListeningAndSubmit = () => {
+    if (dialogState.status === "listening") {
+      finalizeAndSubmitSpeech(speechSessionIdRef.current);
+    }
+  };
+
+  const handleToggleListening = () => {
+    if (dialogState.status === "listening") {
+      stopListeningAndSubmit();
+    } else if (dialogState.status === "idle") {
+      startListening();
+    }
+  };
+
+  // Handle item pickup (E)
+  const handlePickupItem = (item) => {
+    if (!item) return;
+    if (isItemAlreadyCollected(collectedItemIdsRef.current, item.instanceId)) {
+      return;
+    }
+
+    setCollectedItemIds((prev) => {
+      if (prev.includes(item.instanceId)) return prev;
+      return [...prev, item.instanceId];
+    });
+
+    setInventory((prev) => addItemToInventory(prev, item));
+
+    const def = ITEM_DEFINITIONS[item.itemId];
+    const itemName = getLocalizedItemName(item.itemId, interfaceLanguage) || def?.displayName || item.name || "Item";
+
+    if (pickupToastTimeoutRef.current) {
+      clearTimeout(pickupToastTimeoutRef.current);
+    }
+    setPickupToast({
+      text: `${def?.icon || "📦"} ${itemName} (+1)`,
+      time: Date.now()
+    });
+    pickupToastTimeoutRef.current = setTimeout(() => {
+      setPickupToast(null);
+    }, 2400);
+  };
+
+  // Door interaction (E)
   const handleInteractDoor = () => {
     if (!doorPrompt || dialogState.isOpen || isEvaluatingRef.current || exitEvaluation) return;
 
     if (doorPrompt === "Shop Door") {
       setCurrentLocation("Shop");
+      setInventory({});
+      setCollectedItemIds([]);
+      setItemPrompt(null);
       if (playerRef.current) {
         playerRef.current.position.set(0, 0, 1.5);
         playerRef.current.rotation.y = Math.PI;
@@ -1319,7 +1633,19 @@ JSON Schema:
       cameraAnglesRef.current.radius = 2.0;
 
       messagesHistoryRef.current = [];
-      startNewMissionAttempt(getRandomMission(SHOP_MISSIONS, lastShopMissionIndexRef));
+      const completedMissionIds = Object.keys(userProfile?.missionHistory || {});
+      const nextShopMission = selectNextMission(MISSIONS_CATALOG.Shop, {
+        lastIndexRef: lastShopMissionIndexRef,
+        recentMissionIds: recentShopMissionIdsRef.current,
+        completedMissionIds
+      });
+      if (nextShopMission?.id) {
+        recentShopMissionIdsRef.current = [
+          ...recentShopMissionIdsRef.current.slice(-3),
+          nextShopMission.id
+        ];
+      }
+      startNewMissionAttempt(nextShopMission);
     } else if (doorPrompt === "Cafe Door") {
       setCurrentLocation("Cafe");
       if (playerRef.current) {
@@ -1331,7 +1657,7 @@ JSON Schema:
       cameraAnglesRef.current.radius = 2.0;
 
       messagesHistoryRef.current = [];
-      startNewMissionAttempt(getRandomMission(CAFE_MISSIONS, lastCafeMissionIndexRef));
+      startNewMissionAttempt(getRandomMission(MISSIONS_CATALOG.Cafe, lastCafeMissionIndexRef));
     } else if (doorPrompt === "Hotel Door") {
       setCurrentLocation("Hotel");
       if (playerRef.current) {
@@ -1343,7 +1669,7 @@ JSON Schema:
       cameraAnglesRef.current.radius = 2.0;
 
       messagesHistoryRef.current = [];
-      startNewMissionAttempt(getRandomMission(HOTEL_MISSIONS, lastHotelMissionIndexRef));
+      startNewMissionAttempt(getRandomMission(MISSIONS_CATALOG.Hotel, lastHotelMissionIndexRef));
     } else if (doorPrompt === "Hospital Door") {
       setCurrentLocation("Hospital");
       if (playerRef.current) {
@@ -1355,7 +1681,7 @@ JSON Schema:
       cameraAnglesRef.current.radius = 2.0;
 
       messagesHistoryRef.current = [];
-      startNewMissionAttempt(getRandomMission(HOSPITAL_MISSIONS, lastHospitalMissionIndexRef));
+      startNewMissionAttempt(getRandomMission(MISSIONS_CATALOG.Hospital, lastHospitalMissionIndexRef));
     } else if (doorPrompt === "Bank Door") {
       setCurrentLocation("Bank");
       if (playerRef.current) {
@@ -1367,7 +1693,7 @@ JSON Schema:
       cameraAnglesRef.current.radius = 2.0;
 
       messagesHistoryRef.current = [];
-      startNewMissionAttempt(getRandomMission(BANK_MISSIONS, lastBankMissionIndexRef));
+      startNewMissionAttempt(getRandomMission(MISSIONS_CATALOG.Bank, lastBankMissionIndexRef));
     } else if (doorPrompt === "Library Door") {
       setCurrentLocation("Library");
       if (playerRef.current) {
@@ -1379,7 +1705,7 @@ JSON Schema:
       cameraAnglesRef.current.radius = 2.0;
 
       messagesHistoryRef.current = [];
-      startNewMissionAttempt(getRandomMission(LIBRARY_MISSIONS, lastLibraryMissionIndexRef));
+      startNewMissionAttempt(getRandomMission(MISSIONS_CATALOG.Library, lastLibraryMissionIndexRef));
     } else if (doorPrompt === "Police Station Door") {
       setCurrentLocation("PoliceStation");
       if (playerRef.current) {
@@ -1391,11 +1717,11 @@ JSON Schema:
       cameraAnglesRef.current.radius = 2.0;
 
       messagesHistoryRef.current = [];
-      startNewMissionAttempt(getRandomMission(POLICE_MISSIONS, lastPoliceMissionIndexRef));
+      startNewMissionAttempt(getRandomMission(MISSIONS_CATALOG.PoliceStation, lastPoliceMissionIndexRef));
     } else if (doorPrompt === "Language School Door") {
       setCurrentLocation("LanguageSchool");
       if (playerRef.current) {
-        playerRef.current.position.set(-14.4, 0, 37.2);
+        playerRef.current.position.set(-22.0, 0, 39.2);
         playerRef.current.rotation.y = Math.PI;
       }
       cameraAnglesRef.current.theta = 0;
@@ -1403,11 +1729,11 @@ JSON Schema:
       cameraAnglesRef.current.radius = 2.0;
 
       messagesHistoryRef.current = [];
-      startNewMissionAttempt(getRandomMission(LANGUAGE_SCHOOL_MISSIONS, lastLanguageSchoolMissionIndexRef));
+      startNewMissionAttempt(getRandomMission(MISSIONS_CATALOG.LanguageSchool, lastLanguageSchoolMissionIndexRef));
     } else if (doorPrompt === "Study Center Door") {
       setCurrentLocation("StudyCenter");
       if (playerRef.current) {
-        playerRef.current.position.set(-7.5, 0, 37.2);
+        playerRef.current.position.set(-9.5, 0, 39.2);
         playerRef.current.rotation.y = Math.PI;
       }
       cameraAnglesRef.current.theta = 0;
@@ -1415,11 +1741,11 @@ JSON Schema:
       cameraAnglesRef.current.radius = 2.0;
 
       messagesHistoryRef.current = [];
-      startNewMissionAttempt(getRandomMission(STUDY_CENTER_MISSIONS, lastStudyCenterMissionIndexRef));
+      startNewMissionAttempt(getRandomMission(MISSIONS_CATALOG.StudyCenter, lastStudyCenterMissionIndexRef));
     } else if (doorPrompt === "Community Center Door") {
       setCurrentLocation("CommunityCenter");
       if (playerRef.current) {
-        playerRef.current.position.set(7.2, 0, 37.2);
+        playerRef.current.position.set(9.5, 0, 39.2);
         playerRef.current.rotation.y = Math.PI;
       }
       cameraAnglesRef.current.theta = 0;
@@ -1427,11 +1753,11 @@ JSON Schema:
       cameraAnglesRef.current.radius = 2.0;
 
       messagesHistoryRef.current = [];
-      startNewMissionAttempt(getRandomMission(COMMUNITY_CENTER_MISSIONS, lastCommunityCenterMissionIndexRef));
+      startNewMissionAttempt(getRandomMission(MISSIONS_CATALOG.CommunityCenter, lastCommunityCenterMissionIndexRef));
     } else if (doorPrompt === "Career Center Door") {
       setCurrentLocation("CareerCenter");
       if (playerRef.current) {
-        playerRef.current.position.set(14.4, 0, 37.2);
+        playerRef.current.position.set(22.0, 0, 39.2);
         playerRef.current.rotation.y = Math.PI;
       }
       cameraAnglesRef.current.theta = 0;
@@ -1439,11 +1765,11 @@ JSON Schema:
       cameraAnglesRef.current.radius = 2.0;
 
       messagesHistoryRef.current = [];
-      startNewMissionAttempt(getRandomMission(CAREER_CENTER_MISSIONS, lastCareerCenterMissionIndexRef));
+      startNewMissionAttempt(getRandomMission(MISSIONS_CATALOG.CareerCenter, lastCareerCenterMissionIndexRef));
     } else if (doorPrompt === "Activity Center Door") {
       setCurrentLocation("ActivityCenter");
       if (playerRef.current) {
-        playerRef.current.position.set(-10.8, 0, 42.8);
+        playerRef.current.position.set(-16.0, 0, 49.5);
         playerRef.current.rotation.y = Math.PI;
       }
       cameraAnglesRef.current.theta = 0;
@@ -1451,11 +1777,11 @@ JSON Schema:
       cameraAnglesRef.current.radius = 2.0;
 
       messagesHistoryRef.current = [];
-      startNewMissionAttempt(getRandomMission(ACTIVITY_CENTER_MISSIONS, lastActivityCenterMissionIndexRef));
+      startNewMissionAttempt(getRandomMission(MISSIONS_CATALOG.ActivityCenter, lastActivityCenterMissionIndexRef));
     } else if (doorPrompt === "Multi-Purpose Hall Door") {
       setCurrentLocation("MultiPurposeHall");
       if (playerRef.current) {
-        playerRef.current.position.set(10.8, 0, 42.8);
+        playerRef.current.position.set(16.0, 0, 49.5);
         playerRef.current.rotation.y = Math.PI;
       }
       cameraAnglesRef.current.theta = 0;
@@ -1463,7 +1789,7 @@ JSON Schema:
       cameraAnglesRef.current.radius = 2.0;
 
       messagesHistoryRef.current = [];
-      startNewMissionAttempt(getRandomMission(MULTI_PURPOSE_HALL_MISSIONS, lastMultiPurposeHallMissionIndexRef));
+      startNewMissionAttempt(getRandomMission(MISSIONS_CATALOG.MultiPurposeHall, lastMultiPurposeHallMissionIndexRef));
     } else if (
       doorPrompt === "Exit Shop" ||
       doorPrompt === "Exit Cafe" ||
@@ -1485,56 +1811,47 @@ JSON Schema:
 
   // NPC bilan suhbat bosilganda (F)
   const handleInteractNPC = () => {
-    if (dialogState.isOpen) {
+    const currentLearningLang = learningLanguageRef.current || learningLanguage;
+    const plan = handleNPCInteraction({
+      npcPrompt,
+      messagesHistory: messagesHistoryRef.current,
+      isDialogOpen: dialogState.isOpen,
+      learningLanguage: currentLearningLang
+    });
+
+    if (plan.action === "close") {
+      console.log(formatInteractionTrace(plan.trace));
       closeDialog();
       return;
     }
-    if (!npcPrompt) return;
 
-    if (messagesHistoryRef.current.length === 0) {
-      const greeting =
-        npcPrompt === "Shop Seller"
-          ? "Hello! Welcome to our village shop. What can I get for you today?"
-          : npcPrompt === "Hotel Receptionist"
-            ? "Hello! Welcome to the Village Hotel. How can I help you today?"
-            : npcPrompt === "Sarah"
-              ? "Hello! Welcome to the Village Hospital. How can I help you today?"
-              : npcPrompt === "Bank Employee"
-                ? "Hello! Welcome to Village Bank. How can I help you today?"
-                : npcPrompt === "Librarian" || npcPrompt === "Emily"
-                  ? "Hello! Welcome to Village Library. How can I help you?"
-                  : npcPrompt === "Police Officer" || npcPrompt === "Officer Alex" || npcPrompt === "Alex"
-                    ? "Hello! Welcome to the village police station. How can I help you today?"
-                    : npcPrompt === "Teacher Olivia" || npcPrompt === "Olivia"
-                      ? "Hello! Welcome to our village language school. I'm Teacher Olivia. How can I help you today?"
-                      : npcPrompt === "Tutor Daniel" || npcPrompt === "Daniel"
-                        ? "Hi there! Welcome to the village study center. I'm Tutor Daniel. What would you like to study today?"
-                        : npcPrompt === "Staff Mina" || npcPrompt === "Mina"
-                          ? "Hello! Welcome to the village community center. I'm Mina. How can I help you today?"
-                          : npcPrompt === "Career Counselor James" || npcPrompt === "James"
-                            ? "Hello! Welcome to the village career center. I'm James. How can I help you today?"
-                            : npcPrompt === "Coordinator Hana" || npcPrompt === "Hana"
-                              ? "Hello! Welcome to the village activity center. I'm Hana. Are you interested in joining one of our activities?"
-                              : npcPrompt === "Coordinator Yuri" || npcPrompt === "Yuri"
-                                ? "Hello! Welcome to the village multi-purpose hall. I'm Yuri. Are you here for a community event?"
-                                : "Hi there! Welcome to the Language Cafe. What can I brew for you today?";
+    if (plan.action === "ignore") {
+      console.log(formatInteractionTrace(plan.trace));
+      return;
+    }
 
-      messagesHistoryRef.current.push({ sender: "npc", text: greeting });
+    if (plan.action === "open_greeting") {
+      messagesHistoryRef.current.push({ sender: "npc", text: plan.greeting });
       setDialogState({
         isOpen: true,
-        npcName: npcPrompt,
+        npcName: plan.npcName,
         status: "speaking",
-        messages: [{ sender: "npc", text: greeting }]
+        messages: [{ sender: "npc", text: plan.greeting }]
       });
 
-      speakText(greeting, npcPrompt);
-    } else {
+      speakText(plan.textToSpeak, plan.npcName, plan.ttsSource, plan.trace);
+      return;
+    }
+
+    if (plan.action === "open_existing") {
+      console.log(formatInteractionTrace(plan.trace));
       setDialogState({
         isOpen: true,
-        npcName: npcPrompt,
+        npcName: plan.npcName,
         status: "idle",
         messages: [...messagesHistoryRef.current]
       });
+      return;
     }
   };
 
@@ -1699,17 +2016,21 @@ JSON Schema:
         cameraAnglesRef={cameraAnglesRef}
         currentLocation={currentLocation}
         isDialogOpen={dialogState.isOpen}
-        hasModalOpen={Boolean(activeMission || exitEvaluation || isProgressPanelOpen)}
+        hasModalOpen={Boolean(activeMission || exitEvaluation || isProgressPanelOpen || isSettingsOpen)}
         isTalking={dialogState.status === "speaking"}
-        onPromptChange={({ door, npc }) => {
+        shopItems={DEFAULT_SHOP_3D_ITEMS}
+        collectedItemIds={collectedItemIds}
+        onPickupItem={handlePickupItem}
+        onPromptChange={({ door, npc, item }) => {
           setDoorPrompt(door);
           setNpcPrompt(npc);
+          setItemPrompt(item);
         }}
         onInteractDoor={handleInteractDoor}
         onInteractNPC={handleInteractNPC}
       />
 
-      {/* Nazorat eslatmasi */}
+      {/* Control navigation hints */}
       {!dialogState.isOpen && !exitEvaluation && (
         <div
           style={{
@@ -1724,7 +2045,15 @@ JSON Schema:
             pointerEvents: "none"
           }}
         >
-          🖱️ <strong>Mouse Drag:</strong> Obzor | ⌨️ <strong>WASD:</strong> Harakat | 🚪 <strong>E:</strong> Eshik | 💬 <strong>F:</strong> Suhbat
+          {interfaceLanguage === "ko" ? (
+            <span>
+              🖱️ <strong>마우스 드래그:</strong> 시점 전환 | ⌨️ <strong>WASD:</strong> 이동 | 🚪 <strong>E:</strong> 출입 / 결과 | 💬 <strong>F:</strong> 대화 | 📊 <strong>M:</strong> 통계
+            </span>
+          ) : (
+            <span>
+              🖱️ <strong>Mouse Drag:</strong> Look Around | ⌨️ <strong>WASD:</strong> Move | 🚪 <strong>E:</strong> Enter / Exit | 💬 <strong>F:</strong> Talk | 📊 <strong>M:</strong> Stats
+            </span>
+          )}
         </div>
       )}
 
@@ -1769,7 +2098,9 @@ JSON Schema:
                 cursor: isRetryingSave ? "not-allowed" : "pointer"
               }}
             >
-              {isRetryingSave ? "⏳ Saqlanmoqda..." : "🔄 Qaytadan urinish"}
+              {isRetryingSave
+                ? (interfaceLanguage === "ko" ? "⏳ 저장 중..." : "⏳ Saving...")
+                : (interfaceLanguage === "ko" ? "🔄 다시 시도" : "🔄 Retry")}
             </button>
           )}
           <button
@@ -1788,14 +2119,14 @@ JSON Schema:
               marginLeft: "4px",
               lineHeight: 1
             }}
-            title="Yopish"
+            title={interfaceLanguage === "ko" ? "닫기" : "Close"}
           >
             ✕
           </button>
         </div>
       )}
 
-      {/* User Session & Sign Out (Top-Left HUD) */}
+      {/* User Session & Settings (Top-Left HUD) */}
       {!dialogState.isOpen && !exitEvaluation && (
         <div
           style={{
@@ -1830,7 +2161,21 @@ JSON Schema:
             >
               ⚡ {userProfile?.stats?.totalXP ?? 0} XP
             </span>
-            {userProfile?.learningPreferences?.level && (
+            {Boolean(userProfile?.streak?.current) && (
+              <span
+                style={{
+                  fontSize: "11px",
+                  fontWeight: "700",
+                  background: "rgba(249, 115, 22, 0.2)",
+                  color: "#fb923c",
+                  padding: "1px 6px",
+                  borderRadius: "6px"
+                }}
+              >
+                🔥 {t("hud.streakDays", { count: userProfile.streak.current }, interfaceLanguage)}
+              </span>
+            )}
+            {learningLevel && (
               <span
                 style={{
                   fontSize: "11px",
@@ -1842,8 +2187,8 @@ JSON Schema:
                   textTransform: "capitalize"
                 }}
               >
-                {userProfile.learningPreferences.language === "ko" ? "🇰🇷" : "🇺🇸"}{" "}
-                {userProfile.learningPreferences.level}
+                {learningLanguage === "ko" ? "🇰🇷" : "🇺🇸"}{" "}
+                {getLevelName(learningLevel, interfaceLanguage)}
               </span>
             )}
           </span>
@@ -1860,11 +2205,27 @@ JSON Schema:
               cursor: "pointer"
             }}
           >
-            📊 Statistika
+            📊 {interfaceLanguage === "ko" ? "통계" : "Statistics"}
+          </button>
+          <button
+            onClick={() => setIsSettingsOpen(true)}
+            style={{
+              background: "rgba(168, 85, 247, 0.25)",
+              border: "1px solid rgba(168, 85, 247, 0.5)",
+              color: "#d8b4fe",
+              borderRadius: "6px",
+              padding: "3px 8px",
+              fontSize: "11px",
+              fontWeight: "600",
+              cursor: "pointer"
+            }}
+          >
+            ⚙️ {t("hud.openSettings", {}, interfaceLanguage)}
           </button>
           <button
             onClick={() => {
               setIsProgressPanelOpen(false);
+              setIsSettingsOpen(false);
               signOutUser();
             }}
             style={{
@@ -1878,7 +2239,7 @@ JSON Schema:
               cursor: "pointer"
             }}
           >
-            Log Out
+            {t("auth.signOut", {}, interfaceLanguage) || "Log Out"}
           </button>
         </div>
       )}
@@ -1888,11 +2249,214 @@ JSON Schema:
         <MiniMap
           playerRef={playerRef}
           currentLocation={currentLocation}
+          interfaceLanguage={interfaceLanguage}
         />
       )}
 
-      {/* Eshik belgisi (E) */}
-      {doorPrompt && !dialogState.isOpen && !exitEvaluation && (
+      {/* Shop Mission & Inventory Panel (Top-Right, below MiniMap) */}
+      {currentLocation === "Shop" && !exitEvaluation && (
+        <div
+          style={{
+            position: "absolute",
+            top: "215px",
+            right: "16px",
+            width: "220px",
+            background: "rgba(15, 23, 42, 0.92)",
+            backdropFilter: "blur(10px)",
+            WebkitBackdropFilter: "blur(10px)",
+            border: "1px solid rgba(255, 255, 255, 0.18)",
+            borderRadius: "12px",
+            boxShadow: "0 8px 24px rgba(0, 0, 0, 0.5)",
+            padding: "12px 14px",
+            color: "white",
+            zIndex: 10,
+            display: "flex",
+            flexDirection: "column",
+            gap: "10px",
+            fontFamily: "system-ui, -apple-system, sans-serif"
+          }}
+        >
+          {/* Header */}
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: "1px solid rgba(255, 255, 255, 0.12)", paddingBottom: "6px" }}>
+            <span style={{ fontSize: "12px", fontWeight: "700", textTransform: "uppercase", letterSpacing: "0.5px", color: "#60a5fa" }}>
+              {t("hud.shopMissionTitle", {}, interfaceLanguage)}
+            </span>
+            <span style={{ fontSize: "11px", color: "#94a3b8" }}>
+              {t("hud.itemsCount", { count: Object.values(inventory).reduce((sum, count) => sum + count, 0) }, interfaceLanguage)}
+            </span>
+          </div>
+
+          {/* Mission Checklist */}
+          <div>
+            <div style={{ fontSize: "11px", color: "#94a3b8", marginBottom: "4px", fontWeight: "600" }}>
+              {t("hud.checklistTitle", {}, interfaceLanguage)}
+            </div>
+            {(() => {
+              const activeReqs = validateMissionInventory(
+                activeMission || MISSIONS_CATALOG.Shop[0],
+                inventory,
+                interfaceLanguage
+              );
+              return (
+                <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+                  {activeReqs.collectedRequirements.map((req) => (
+                    <div
+                      key={req.itemId}
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "space-between",
+                        fontSize: "12px",
+                        background: req.isMet ? "rgba(34, 197, 94, 0.15)" : "rgba(255, 255, 255, 0.05)",
+                        border: req.isMet ? "1px solid rgba(34, 197, 94, 0.4)" : "1px solid rgba(255, 255, 255, 0.08)",
+                        borderRadius: "6px",
+                        padding: "4px 8px"
+                      }}
+                    >
+                      <span style={{ color: req.isMet ? "#86efac" : "#e2e8f0" }}>
+                        {ITEM_DEFINITIONS[req.itemId]?.icon} {req.displayName}
+                      </span>
+                      <span
+                        style={{
+                          fontWeight: "700",
+                          color: req.isMet ? "#4ade80" : "#facc15",
+                          fontSize: "11px"
+                        }}
+                      >
+                        {req.current}/{req.required} {req.isMet ? "✓" : ""}
+                      </span>
+                    </div>
+                  ))}
+                  {activeReqs.excessList.map((ex) => (
+                    <div
+                      key={`excess-${ex.itemId}`}
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "space-between",
+                        fontSize: "11px",
+                        background: "rgba(239, 68, 68, 0.15)",
+                        border: "1px solid rgba(239, 68, 68, 0.4)",
+                        borderRadius: "6px",
+                        padding: "3px 8px",
+                        color: "#fca5a5"
+                      }}
+                    >
+                      <span>⚠️ {ex.displayName}</span>
+                      <span>{t("hud.extraItemsBadge", { count: ex.excess }, interfaceLanguage)}</span>
+                    </div>
+                  ))}
+                </div>
+              );
+            })()}
+          </div>
+
+          {/* Inventory Items List */}
+          <div>
+            <div style={{ fontSize: "11px", color: "#94a3b8", marginBottom: "4px", fontWeight: "600" }}>
+              {t("hud.backpackTitle", {}, interfaceLanguage)}
+            </div>
+            {Object.keys(inventory).length === 0 ? (
+              <div style={{ fontSize: "11px", color: "#64748b", fontStyle: "italic", textAlign: "center", padding: "6px 0", whiteSpace: "pre-line" }}>
+                {t("hud.backpackEmpty", {}, interfaceLanguage)}
+              </div>
+            ) : (
+              <div style={{ display: "flex", flexDirection: "column", gap: "3px" }}>
+                {Object.entries(inventory).map(([itemId, qty]) => {
+                  const def = ITEM_DEFINITIONS[itemId];
+                  const localizedName = getLocalizedItemName(itemId, interfaceLanguage) || def?.displayName || itemId;
+                  return (
+                    <div
+                      key={itemId}
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "space-between",
+                        fontSize: "12px",
+                        padding: "3px 6px",
+                        borderRadius: "4px",
+                        background: "rgba(255, 255, 255, 0.04)"
+                      }}
+                    >
+                      <span>
+                        {def?.icon || "📦"} {localizedName}
+                      </span>
+                      <strong style={{ color: "#38bdf8" }}>×{qty}</strong>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Pickup Toast Notification */}
+      {pickupToast && !exitEvaluation && (
+        <div
+          style={{
+            position: "absolute",
+            top: "20px",
+            left: "50%",
+            transform: "translateX(-50%)",
+            background: "rgba(34, 197, 94, 0.95)",
+            color: "white",
+            padding: "8px 18px",
+            borderRadius: "20px",
+            fontSize: "14px",
+            fontWeight: "600",
+            boxShadow: "0 6px 20px rgba(0, 0, 0, 0.35)",
+            zIndex: 50,
+            display: "flex",
+            alignItems: "center",
+            gap: "6px"
+          }}
+        >
+          <span>✓</span>
+          <span>{pickupToast.text}</span>
+        </div>
+      )}
+
+      {/* Item Pickup prompt (E) */}
+      {itemPrompt && !dialogState.isOpen && !exitEvaluation && (
+        <div
+          style={{
+            position: "absolute",
+            zIndex: 10,
+            bottom: "80px",
+            left: "50%",
+            transform: "translateX(-50%)",
+            background: "rgba(15, 23, 42, 0.9)",
+            border: "1px solid rgba(59, 130, 246, 0.5)",
+            color: "white",
+            padding: "12px 24px",
+            borderRadius: "12px",
+            textAlign: "center",
+            fontSize: "16px",
+            boxShadow: "0 8px 24px rgba(0, 0, 0, 0.5)",
+            backdropFilter: "blur(8px)"
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "center", gap: "8px", justifyContent: "center" }}>
+            <span style={{ fontSize: "20px" }}>
+              {ITEM_DEFINITIONS[itemPrompt.itemId]?.icon || "📦"}
+            </span>
+            {interfaceLanguage === "ko" ? (
+              <span>
+                <strong style={{ color: "#60a5fa" }}>E</strong> 키를 눌러 <strong>{getLocalizedItemName(itemPrompt.itemId, interfaceLanguage) || itemPrompt.displayName}</strong> 획득
+              </span>
+            ) : (
+              <span>
+                Press <strong style={{ color: "#60a5fa" }}>E</strong> to pick up{" "}
+                <strong>{getLocalizedItemName(itemPrompt.itemId, interfaceLanguage) || itemPrompt.displayName}</strong>
+              </span>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Door interaction prompt (E) */}
+      {doorPrompt && !itemPrompt && !dialogState.isOpen && !exitEvaluation && (
         <div
           style={{
             position: "absolute",
@@ -1911,12 +2475,14 @@ JSON Schema:
         >
           <div><strong>{doorPrompt}</strong></div>
           <div style={{ marginTop: "4px", fontSize: "14px", color: "#ddd" }}>
-            Press <strong>E</strong> to {doorPrompt.startsWith("Exit") ? "exit and view results" : "enter"}
+            {doorPrompt.startsWith("Exit")
+              ? t("prompts.exitDoor", {}, interfaceLanguage)
+              : t("prompts.enterDoor", {}, interfaceLanguage)}
           </div>
         </div>
       )}
 
-      {/* Missiya modali */}
+      {/* Active Mission Intro Modal */}
       {activeMission && !dialogState.isOpen && !exitEvaluation && (
         <div
           style={{
@@ -1935,9 +2501,13 @@ JSON Schema:
           }}
         >
           <h2 style={{ margin: "0 0 10px 0" }}>{activeMission.title}</h2>
-          <p style={{ fontSize: "16px", lineHeight: "1.5" }}>{activeMission.text}</p>
+          <p style={{ fontSize: "16px", lineHeight: "1.5" }}>{activeMission.text || activeMission.goal}</p>
           <p style={{ color: "#666", fontSize: "14px" }}>
-            Talk to the NPC using <strong>F</strong>. Press <strong>F</strong> again to close dialogue.
+            {interfaceLanguage === "ko" ? (
+              <span><strong>F</strong> 키를 눌러 NPC와 대화하세요. <strong>F</strong> 키를 다시 누르면 대화창이 닫힙니다.</span>
+            ) : (
+              <span>Talk to the NPC using <strong>F</strong>. Press <strong>F</strong> again to close dialogue.</span>
+            )}
           </p>
           <button
             onClick={() => setActiveMission(null)}
@@ -1952,13 +2522,13 @@ JSON Schema:
               fontSize: "16px"
             }}
           >
-            Start Mission
+            {interfaceLanguage === "ko" ? "미션 시작" : "Start Mission"}
           </button>
         </div>
       )}
 
-      {/* NPC belgisi (F) */}
-      {npcPrompt && !dialogState.isOpen && !exitEvaluation && (
+      {/* NPC Proximity Prompt (F) */}
+      {npcPrompt && !itemPrompt && !dialogState.isOpen && !exitEvaluation && (
         <div
           style={{
             position: "absolute",
@@ -1974,11 +2544,11 @@ JSON Schema:
             boxShadow: "0 4px 15px rgba(0,0,0,0.4)"
           }}
         >
-          Press <strong>F</strong> to talk to <strong>{npcPrompt}</strong>
+          {t("prompts.talkToNpc", { npc: npcPrompt }, interfaceLanguage)}
         </div>
       )}
 
-      {/* Chiqishdagi tahlil modali */}
+      {/* Exit Evaluation Modal */}
       {exitEvaluation && (
         <div
           style={{
@@ -2009,21 +2579,25 @@ JSON Schema:
           >
             {exitEvaluation.loading ? (
               <div style={{ textAlign: "center", padding: "30px 10px" }}>
-                <h3 style={{ color: "#64b5f6", margin: "0 0 10px 0" }}>⏳ Tahlil qilinmoqda...</h3>
-                <p style={{ color: "#aaa", fontSize: "14px" }}>AI suhbatingizni tekshirmoqda...</p>
+                <h3 style={{ color: "#64b5f6", margin: "0 0 10px 0" }}>⏳ {t("evaluation.analyzingSpeech", {}, interfaceLanguage)}</h3>
+                <p style={{ color: "#aaa", fontSize: "14px" }}>
+                  {interfaceLanguage === "ko" ? "AI가 대화 내용을 평가하고 있습니다..." : "AI is evaluating your spoken conversation..."}
+                </p>
               </div>
             ) : (
               <>
                 <h2 style={{ margin: "0 0 8px 0", color: exitEvaluation.completed ? "#4caf50" : "#ffb74d" }}>
-                  {exitEvaluation.completed ? "🎉 Vazifa Bajarildi!" : "📋 Vazifa Natijasi"}
+                  {exitEvaluation.completed
+                    ? t("evaluation.modalTitleSuccess", {}, interfaceLanguage)
+                    : t("evaluation.modalTitleResult", {}, interfaceLanguage)}
                 </h2>
                 <p style={{ margin: "0 0 16px 0", color: "#aaa", fontSize: "14px" }}>
-                  Chiqish oldidan til tahlili hisoboti:
+                  {interfaceLanguage === "ko" ? "퇴장 전 언어 평가 결과 리포트:" : "Speaking evaluation report before exit:"}
                 </p>
 
                 <div style={{ marginBottom: "18px" }}>
                   <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "6px", fontSize: "15px" }}>
-                    <span>Bajarilish darajasi:</span>
+                    <span>{t("evaluation.scoreLabel", {}, interfaceLanguage)}</span>
                     <strong style={{ color: "#64b5f6" }}>{exitEvaluation.score}%</strong>
                   </div>
                   <div style={{ width: "100%", height: "8px", background: "#333", borderRadius: "4px", overflow: "hidden" }}>
@@ -2043,7 +2617,7 @@ JSON Schema:
                   </div>
                 </div>
 
-                {/* XP mukofoti */}
+                {/* XP Reward Preview */}
                 <div
                   style={{
                     display: "flex",
@@ -2061,7 +2635,7 @@ JSON Schema:
                     fontSize: "14px"
                   }}
                 >
-                  <span style={{ color: "#ccc" }}>XP mukofoti:</span>
+                  <span style={{ color: "#ccc" }}>{interfaceLanguage === "ko" ? "XP 보상:" : "XP Reward:"}</span>
                   <strong
                     style={{
                       color: exitEvaluation.completed ? "#fde047" : "#94a3b8",
@@ -2070,12 +2644,14 @@ JSON Schema:
                   >
                     {exitEvaluation.completed
                       ? `+${calculateMissionXP(true, exitEvaluation.score)} XP`
-                      : "+0 XP — Vazifa to‘liq bajarilmadi"}
+                      : t("evaluation.noXpEarned", {}, interfaceLanguage)}
                   </strong>
                 </div>
 
                 <div style={{ marginBottom: "18px" }}>
-                  <strong style={{ color: "#ef5350", fontSize: "14px" }}>Xatolar va to'g'rilash:</strong>
+                  <strong style={{ color: "#ef5350", fontSize: "14px" }}>
+                    {t("evaluation.mistakesTitle", {}, interfaceLanguage)}
+                  </strong>
                   <div style={{ marginTop: "8px", display: "flex", flexDirection: "column", gap: "8px", maxHeight: "150px", overflowY: "auto" }}>
                     {exitEvaluation.mistakes && exitEvaluation.mistakes.length > 0 ? (
                       exitEvaluation.mistakes.map((item, idx) => (
@@ -2093,7 +2669,9 @@ JSON Schema:
                         </div>
                       ))
                     ) : (
-                      <div style={{ color: "#4caf50", fontSize: "13px" }}>Ajoyib! Hech qanday xato yo'q.</div>
+                      <div style={{ color: "#4caf50", fontSize: "13px" }}>
+                        {t("evaluation.noMistakes", {}, interfaceLanguage)}
+                      </div>
                     )}
                   </div>
                 </div>
@@ -2108,7 +2686,9 @@ JSON Schema:
                     marginBottom: "20px"
                   }}
                 >
-                  <strong style={{ color: "#64b5f6" }}>Umumiy xulosa: </strong>
+                  <strong style={{ color: "#64b5f6" }}>
+                    {t("evaluation.aiSummaryTitle", {}, interfaceLanguage)}{" "}
+                  </strong>
                   {exitEvaluation.feedback}
                 </div>
 
@@ -2129,7 +2709,9 @@ JSON Schema:
                       opacity: isSavingProgress ? 0.8 : 1
                     }}
                   >
-                    {isSavingProgress ? "⏳ Saqlanmoqda..." : "Davom etish (Qishloqqa chiqish)"}
+                    {isSavingProgress
+                      ? (interfaceLanguage === "ko" ? "⏳ 저장 중..." : "⏳ Saving...")
+                      : t("evaluation.returnToVillage", {}, interfaceLanguage)}
                   </button>
 
                   <button
@@ -2147,7 +2729,7 @@ JSON Schema:
                       cursor: isSavingProgress ? "not-allowed" : "pointer"
                     }}
                   >
-                    Qaytish (Suhbatni davom ettirish)
+                    {interfaceLanguage === "ko" ? "대화 계속하기" : "Continue Conversation"}
                   </button>
                 </div>
               </>
@@ -2156,15 +2738,26 @@ JSON Schema:
         </div>
       )}
 
-      {/* Shaxsiy natijalar modali (User Progress Panel) */}
+      {/* Progress Panel Modal */}
       <ProgressPanelModal
         open={isProgressPanelOpen}
         onClose={() => setIsProgressPanelOpen(false)}
         authUser={authUser}
         userProfile={userProfile}
+        interfaceLanguage={interfaceLanguage}
       />
 
-      {/* Chat oynasi */}
+      {/* Settings Modal */}
+      <SettingsModal
+        isOpen={isSettingsOpen}
+        onClose={() => setIsSettingsOpen(false)}
+        initialInterfaceLanguage={interfaceLanguage}
+        initialLearningLanguage={learningLanguage}
+        initialLearningLevel={learningLevel}
+        onSave={handleUpdateSettings}
+      />
+
+      {/* NPC Chat Window */}
       {dialogState.isOpen && (
         <div
           style={{
@@ -2197,21 +2790,71 @@ JSON Schema:
           >
             <div>
               <div style={{ fontWeight: "bold", fontSize: "17px" }}>{dialogState.npcName}</div>
-              <div style={{ fontSize: "12px", color: "#64b5f6", marginTop: "2px" }}>✨ Powered by Groq AI</div>
+              <div style={{ fontSize: "12px", color: "#64b5f6", marginTop: "2px" }}>
+                {t("dialog.poweredBy", {}, interfaceLanguage)}
+              </div>
             </div>
             <button
+              type="button"
               onClick={closeDialog}
+              title={t("dialog.closeDialogTitle", {}, interfaceLanguage)}
               style={{
                 background: "transparent",
                 border: "none",
                 color: "#aaa",
                 fontSize: "20px",
-                cursor: "pointer"
+                cursor: "pointer",
+                padding: "4px"
               }}
             >
               ✕
             </button>
           </div>
+
+          {voiceFeedback && (
+            <div
+              style={{
+                padding: "8px 16px",
+                fontSize: "12px",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                background:
+                  voiceFeedback.type === "error"
+                    ? "rgba(239, 68, 68, 0.22)"
+                    : "rgba(245, 158, 11, 0.22)",
+                borderBottom: `1px solid ${
+                  voiceFeedback.type === "error"
+                    ? "rgba(239, 68, 68, 0.45)"
+                    : "rgba(245, 158, 11, 0.45)"
+                }`,
+                color: voiceFeedback.type === "error" ? "#fca5a5" : "#fcd34d"
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "center", gap: "8px", flex: 1 }}>
+                <span style={{ fontSize: "14px" }}>
+                  {voiceFeedback.type === "error" ? "⚠️" : "ℹ️"}
+                </span>
+                <span style={{ lineHeight: "1.3" }}>{voiceFeedback.message}</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setVoiceFeedback(null)}
+                title="Dismiss"
+                style={{
+                  background: "transparent",
+                  border: "none",
+                  color: "inherit",
+                  cursor: "pointer",
+                  fontSize: "16px",
+                  padding: "0 4px",
+                  lineHeight: 1
+                }}
+              >
+                ×
+              </button>
+            </div>
+          )}
 
           <div
             style={{
@@ -2221,41 +2864,129 @@ JSON Schema:
               maxHeight: "310px",
               display: "flex",
               flexDirection: "column",
-              gap: "10px"
+              gap: "12px"
             }}
           >
-            {dialogState.messages.map((msg, idx) => (
+            {dialogState.messages.map((msg, idx) => {
+              const isUser = msg.sender === "user";
+              const isCurrentlyPlaying =
+                replayingMessageIndex === idx && dialogState.status === "speaking";
+
+              return (
+                <div
+                  key={idx}
+                  style={{
+                    alignSelf: isUser ? "flex-end" : "flex-start",
+                    maxWidth: "84%",
+                    padding: "10px 14px",
+                    borderRadius: isUser ? "16px 16px 4px 16px" : "16px 16px 16px 4px",
+                    fontSize: "14px",
+                    lineHeight: "1.45",
+                    background: isUser
+                      ? "linear-gradient(135deg, #1d4ed8, #2563eb)"
+                      : "linear-gradient(135deg, #1e293b, #334155)",
+                    color: "white",
+                    border: isUser
+                      ? "1px solid rgba(96, 165, 250, 0.4)"
+                      : "1px solid rgba(148, 163, 184, 0.25)",
+                    boxShadow: "0 2px 8px rgba(0,0,0,0.18)"
+                  }}
+                >
+                  <div
+                    style={{
+                      fontSize: "11px",
+                      color: isUser ? "#93c5fd" : "#94a3b8",
+                      marginBottom: "4px",
+                      fontWeight: "700",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "4px"
+                    }}
+                  >
+                    <span>{isUser ? "👤" : "🤖"}</span>
+                    <span>{isUser ? t("dialog.youLabel", {}, interfaceLanguage) : dialogState.npcName}</span>
+                  </div>
+                  <div>{msg.text}</div>
+
+                  {!isUser && (
+                    <div style={{ marginTop: "7px", display: "flex", justifyContent: "flex-start" }}>
+                      <button
+                        type="button"
+                        onClick={() => handleReplaySpeech(msg.text, idx)}
+                        disabled={dialogState.status === "thinking"}
+                        title={t("dialog.replayVoice", {}, interfaceLanguage)}
+                        style={{
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: "4px",
+                          padding: "3px 8px",
+                          borderRadius: "6px",
+                          border: isCurrentlyPlaying
+                            ? "1px solid rgba(34, 197, 94, 0.5)"
+                            : "1px solid rgba(255, 255, 255, 0.15)",
+                          background: isCurrentlyPlaying
+                            ? "rgba(34, 197, 94, 0.25)"
+                            : "rgba(255, 255, 255, 0.08)",
+                          color: isCurrentlyPlaying ? "#4ade80" : "#cbd5e1",
+                          fontSize: "11px",
+                          fontWeight: "600",
+                          cursor: dialogState.status === "thinking" ? "not-allowed" : "pointer",
+                          transition: "all 0.15s ease"
+                        }}
+                      >
+                        <span>{isCurrentlyPlaying ? "🔊" : "🔈"}</span>
+                        <span>
+                          {isCurrentlyPlaying
+                            ? t("dialog.playingVoice", {}, interfaceLanguage)
+                            : t("dialog.replayVoice", {}, interfaceLanguage)}
+                        </span>
+                      </button>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+            {dialogState.status === "listening" && sttInterimText && (
               <div
-                key={idx}
                 style={{
-                  alignSelf: msg.sender === "user" ? "flex-end" : "flex-start",
-                  maxWidth: "82%",
+                  alignSelf: "flex-end",
+                  maxWidth: "84%",
                   padding: "10px 14px",
-                  borderRadius: "14px",
+                  borderRadius: "16px 16px 4px 16px",
                   fontSize: "14px",
                   lineHeight: "1.4",
-                  background: msg.sender === "user" ? "#1976d2" : "#37474f",
-                  color: "white"
+                  background: "rgba(25, 118, 210, 0.35)",
+                  border: "1px dashed #64b5f6",
+                  color: "#e2e8f0",
+                  fontStyle: "italic"
                 }}
               >
-                <div style={{ fontSize: "11px", opacity: 0.7, marginBottom: "3px", fontWeight: "bold" }}>
-                  {msg.sender === "user" ? "You" : dialogState.npcName}
+                <div style={{ fontSize: "11px", opacity: 0.8, marginBottom: "3px", fontWeight: "bold" }}>
+                  {t("dialog.speakingInterim", {}, interfaceLanguage)}
                 </div>
-                {msg.text}
-              </div>
-            ))}
-            {dialogState.status === "thinking" && (
-              <div style={{ alignSelf: "flex-start", color: "#64b5f6", fontSize: "13px" }}>
-                ✨ {dialogState.npcName} is thinking...
+                "{sttInterimText}"
               </div>
             )}
+            {dialogState.status === "thinking" && (
+              <div style={{ alignSelf: "flex-start", color: "#64b5f6", fontSize: "13px" }}>
+                {t("dialog.npcThinking", { npc: dialogState.npcName }, interfaceLanguage)}
+              </div>
+            )}
+            <div ref={messagesEndRef} />
           </div>
 
           <form
             onSubmit={(e) => {
               e.preventDefault();
               const input = e.target.elements.chatInput;
-              if (input.value.trim() && dialogState.status === "idle") {
+              if (input.value.trim() && dialogState.status !== "thinking" && !isGeneratingRef.current) {
+                if (dialogState.status === "speaking" && "speechSynthesis" in window) {
+                  try {
+                    window.speechSynthesis.cancel();
+                  } catch {}
+                  setReplayingMessageIndex(null);
+                }
+                setVoiceFeedback(null);
                 handleUserSpeech(input.value.trim());
                 input.value = "";
               }
@@ -2271,8 +3002,10 @@ JSON Schema:
             <input
               name="chatInput"
               type="text"
-              placeholder="Ask anything in English..."
-              disabled={dialogState.status !== "idle"}
+              placeholder={t("dialog.inputPlaceholder", {
+                lang: getLanguageName(learningLanguage, interfaceLanguage)
+              }, interfaceLanguage)}
+              disabled={dialogState.status === "thinking"}
               style={{
                 flex: 1,
                 padding: "8px 12px",
@@ -2285,18 +3018,19 @@ JSON Schema:
             />
             <button
               type="submit"
-              disabled={dialogState.status !== "idle"}
+              disabled={dialogState.status === "thinking"}
               style={{
                 padding: "8px 14px",
                 borderRadius: "8px",
                 border: "none",
                 background: "#1976d2",
                 color: "white",
-                cursor: dialogState.status === "idle" ? "pointer" : "not-allowed",
-                fontWeight: "bold"
+                cursor: dialogState.status === "thinking" ? "not-allowed" : "pointer",
+                fontWeight: "bold",
+                opacity: dialogState.status === "thinking" ? 0.6 : 1
               }}
             >
-              Send
+              {t("dialog.sendBtn", {}, interfaceLanguage)}
             </button>
           </form>
 
@@ -2310,42 +3044,63 @@ JSON Schema:
               justifyContent: "space-between"
             }}
           >
-            <div style={{ fontSize: "13px", color: "#bbb" }}>
-              Status:{" "}
-              <strong
-                style={{
-                  color:
-                    dialogState.status === "listening"
-                      ? "#ff5252"
-                      : dialogState.status === "speaking"
-                        ? "#4caf50"
-                        : dialogState.status === "thinking"
-                          ? "#64b5f6"
-                          : "#aaa"
-                }}
-              >
-                {dialogState.status.toUpperCase()}
-              </strong>
+            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+              <span style={{ fontSize: "12px", color: "#94a3b8", fontWeight: "500" }}>
+                {t("dialog.statusLabel", {}, interfaceLanguage)}
+              </span>
+              {(() => {
+                const statusInfo = getVoiceStatusPresentation(dialogState.status, interfaceLanguage);
+                return (
+                  <span
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: "5px",
+                      fontSize: "11px",
+                      fontWeight: "700",
+                      letterSpacing: "0.5px",
+                      padding: "3px 9px",
+                      borderRadius: "12px",
+                      background: statusInfo.bg,
+                      color: statusInfo.color,
+                      border: `1px solid ${statusInfo.color}40`
+                    }}
+                  >
+                    <span>{statusInfo.icon}</span>
+                    <span>{statusInfo.label}</span>
+                  </span>
+                );
+              })()}
             </div>
 
             <button
-              onClick={startListening}
-              disabled={dialogState.status !== "idle"}
+              type="button"
+              onClick={handleToggleListening}
+              disabled={dialogState.status === "thinking" || dialogState.status === "speaking"}
               style={{
                 padding: "8px 16px",
                 borderRadius: "20px",
                 border: "none",
-                background: dialogState.status === "listening" ? "#ff5252" : "#1976d2",
+                background: dialogState.status === "listening" ? "#ef4444" : "#1976d2",
                 color: "white",
-                cursor: dialogState.status === "idle" ? "pointer" : "not-allowed",
+                cursor:
+                  dialogState.status === "thinking" || dialogState.status === "speaking"
+                    ? "not-allowed"
+                    : "pointer",
                 fontWeight: "bold",
                 display: "flex",
                 alignItems: "center",
                 gap: "6px",
-                fontSize: "13px"
+                fontSize: "13px",
+                opacity:
+                  dialogState.status === "thinking" || dialogState.status === "speaking"
+                    ? 0.6
+                    : 1
               }}
             >
-              🎤 {dialogState.status === "listening" ? "Listening..." : "Speak"}
+              {dialogState.status === "listening"
+                ? (interfaceLanguage === "ko" ? "⏹️ 완료 (전송)" : "⏹️ Done (Send)")
+                : (interfaceLanguage === "ko" ? "🎤 말하기" : "🎤 Speak")}
             </button>
           </div>
         </div>

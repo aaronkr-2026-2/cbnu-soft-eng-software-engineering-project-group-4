@@ -239,86 +239,86 @@ export function CameraController({
         shoulderOffsetX = 0.55;
         shoulderOffsetY = 1.45;
       } else if (currentLocation === "LanguageSchool") {
-        // Language School classroom interior: X in [-16.5, -12.3], Z in [34.4, 37.6]
-        // Teacher Olivia is at X = -14.4, Z = 35.0
-        // Clamping camZ to [35.6, 37.6] keeps the camera securely inside the classroom
-        bX = -14.4;
-        bZ = 35.0;
+        // Language School classroom interior: X in [-24.1, -19.9], Z in [36.4, 39.6]
+        // Teacher Olivia is at X = -22.0, Z = 37.0
+        // Clamping camZ to [37.6, 39.6] keeps the camera securely inside the classroom
+        bX = -22.0;
+        bZ = 37.0;
         targetY = 1.32;
-        minZ = 35.6;
-        maxZ = 37.6;
-        minX = -16.2;
-        maxX = -12.6;
+        minZ = 37.6;
+        maxZ = 39.6;
+        minX = -23.8;
+        maxX = -20.2;
         camZOffset = 1.15;
         shoulderOffsetX = 0.55;
         shoulderOffsetY = 1.45;
       } else if (currentLocation === "StudyCenter") {
-        // Study Center interior: X in [-9.6, -5.4], Z in [34.4, 37.6]
-        // Tutor Daniel is at X = -7.5, Z = 35.2
-        // Clamping camZ to [35.6, 37.6] keeps the camera securely inside the room
-        bX = -7.5;
-        bZ = 35.2;
+        // Study Center interior: X in [-11.6, -7.4], Z in [36.4, 39.6]
+        // Tutor Daniel is at X = -9.5, Z = 37.2
+        // Clamping camZ to [37.6, 39.6] keeps the camera securely inside the room
+        bX = -9.5;
+        bZ = 37.2;
         targetY = 1.32;
-        minZ = 35.6;
-        maxZ = 37.6;
-        minX = -9.3;
-        maxX = -5.7;
+        minZ = 37.6;
+        maxZ = 39.6;
+        minX = -11.3;
+        maxX = -7.7;
         camZOffset = 1.15;
         shoulderOffsetX = 0.55;
         shoulderOffsetY = 1.45;
       } else if (currentLocation === "CommunityCenter") {
-        // Community Center interior: X in [4.9, 9.5], Z in [34.4, 37.8]
-        // Staff Mina is at X = 7.2, Z = 35.2
-        // Clamping camZ to [35.6, 37.5] keeps the camera inside the civic hall
-        bX = 7.2;
-        bZ = 35.2;
+        // Community Center interior: X in [7.2, 11.8], Z in [36.4, 39.8]
+        // Staff Mina is at X = 9.5, Z = 37.2
+        // Clamping camZ to [37.6, 39.5] keeps the camera inside the civic hall
+        bX = 9.5;
+        bZ = 37.2;
         targetY = 1.32;
-        minZ = 35.6;
-        maxZ = 37.5;
-        minX = 5.4;
-        maxX = 9.0;
+        minZ = 37.6;
+        maxZ = 39.5;
+        minX = 7.7;
+        maxX = 11.3;
         camZOffset = 1.15;
         shoulderOffsetX = 0.55;
         shoulderOffsetY = 1.45;
       } else if (currentLocation === "CareerCenter") {
-        // Career Center interior: X in [12.1, 16.7], Z in [34.2, 37.9]
-        // Career Counselor James is at X = 14.4, Z = 35.2
-        // Clamping camZ to [35.6, 37.5] keeps the camera inside the counseling office
-        bX = 14.4;
-        bZ = 35.2;
+        // Career Center interior: X in [19.7, 24.3], Z in [36.2, 39.9]
+        // Career Counselor James is at X = 22.0, Z = 37.2
+        // Clamping camZ to [37.6, 39.5] keeps the camera inside the counseling office
+        bX = 22.0;
+        bZ = 37.2;
         targetY = 1.32;
-        minZ = 35.6;
-        maxZ = 37.5;
-        minX = 12.6;
-        maxX = 16.2;
+        minZ = 37.6;
+        maxZ = 39.5;
+        minX = 20.2;
+        maxX = 23.8;
         camZOffset = 1.15;
         shoulderOffsetX = 0.55;
         shoulderOffsetY = 1.45;
       } else if (currentLocation === "ActivityCenter") {
-        // Activity Center interior: X in [-13.2, -8.4], Z in [40.1, 43.5]
-        // Coordinator Hana is at X = -10.8, Z = 41.0
-        // Clamping camZ to [41.4, 43.1] keeps camera inside the activity hall
-        bX = -10.8;
-        bZ = 41.0;
+        // Activity Center interior: X in [-18.4, -13.6], Z in [46.8, 50.2]
+        // Coordinator Hana is at X = -16.0, Z = 47.7
+        // Clamping camZ to [48.1, 49.8] keeps camera inside the activity hall
+        bX = -16.0;
+        bZ = 47.7;
         targetY = 1.32;
-        minZ = 41.4;
-        maxZ = 43.1;
-        minX = -12.7;
-        maxX = -8.9;
+        minZ = 48.1;
+        maxZ = 49.8;
+        minX = -17.9;
+        maxX = -14.1;
         camZOffset = 1.15;
         shoulderOffsetX = 0.55;
         shoulderOffsetY = 1.45;
       } else if (currentLocation === "MultiPurposeHall") {
-        // Multi-Purpose Hall interior: X in [8.7, 12.9], Z in [39.6, 44.0]
-        // Coordinator Yuri is at X = 10.8, Z = 42.0
-        // Clamping camZ to [41.3, 43.3], camX to [9.2, 12.4] keeps camera safely inside the hall
-        bX = 10.8;
-        bZ = 42.0;
+        // Multi-Purpose Hall interior: X in [13.9, 18.1], Z in [46.3, 50.7]
+        // Coordinator Yuri is at X = 16.0, Z = 48.7
+        // Clamping camZ to [48.0, 50.0], camX to [14.4, 17.6] keeps camera safely inside the hall
+        bX = 16.0;
+        bZ = 48.7;
         targetY = 1.32;
-        minZ = 41.3;
-        maxZ = 43.3;
-        minX = 9.2;
-        maxX = 12.4;
+        minZ = 48.0;
+        maxZ = 50.0;
+        minX = 14.4;
+        maxX = 17.6;
         camZOffset = 1.15;
         shoulderOffsetX = 0.55;
         shoulderOffsetY = 1.45;

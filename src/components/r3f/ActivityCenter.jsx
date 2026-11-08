@@ -443,7 +443,7 @@ export function ActivityCenter({ isTalking = false, currentLocation = "outside" 
   if (!isInside) return null;
 
   return (
-    <group>
+    <group position={[-5.2, 0, 6.7]}>
       {/* ============================================================ */}
       {/* 1. WARM NEUTRAL LIGHTING (Max 2 Lightweight Lights)          */}
       {/* ============================================================ */}

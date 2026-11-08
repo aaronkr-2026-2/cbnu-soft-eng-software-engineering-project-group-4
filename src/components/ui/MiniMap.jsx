@@ -1,28 +1,14 @@
 import React, { useEffect, useRef, useMemo } from "react";
 import { VILLAGE_BUILDINGS } from "../r3f/villageBuildingsConfig";
+import { t } from "../../services/i18n";
 
 // World coordinate bounds corresponding to playable village exterior (including North residential expansion)
 const WORLD_MIN_X = -28.0;
 const WORLD_MAX_X = 28.0;
 const WORLD_MIN_Z = -7.0;
-const WORLD_MAX_Z = 42.0;
+const WORLD_MAX_Z = 52.0;
 
-/**
- * Real-time Fixed Top-Down Minimap HUD component.
- * Displays:
- * - Real-time player marker (X, Z position + yaw orientation)
- * - All 7 functional village buildings with distinctive colored markers and labels
- * - Complete village road network:
- *     * Central East-West Main Road (Z = 8.0)
- *     * North Connector Avenue (X = 12.0)
- *     * North Residential Street & Sidewalk (Z = 28.0)
- *     * Pedestrian Alleyway between Hospital & Police Station
- *     * Crosswalks and sidewalks
- * - New North Residential Area zone indicator
- * - Current location status badge (Outdoors or active indoor venue)
- * - 100% lightweight HTML/CSS (0 Canvas overhead, smooth requestAnimationFrame sync)
- */
-export function MiniMap({ playerRef, currentLocation = "outside" }) {
+export function MiniMap({ playerRef, currentLocation = "outside", interfaceLanguage = "en" }) {
   const markerRef = useRef(null);
   const pointerRef = useRef(null);
 
@@ -183,7 +169,7 @@ export function MiniMap({ playerRef, currentLocation = "outside" }) {
             color: "#e2e8f0"
           }}
         >
-          🗺️ VILLAGE MAP
+          🗺️ {t("hud.villageMap", {}, interfaceLanguage)}
         </span>
         <span
           style={{
@@ -213,7 +199,7 @@ export function MiniMap({ playerRef, currentLocation = "outside" }) {
                         : currentLocation === "PoliceStation"
                         ? "POLICE STATION"
                         : currentLocation.toUpperCase()
-            : "OUTDOORS"}
+            : t("hud.outdoors", {}, interfaceLanguage)}
         </span>
       </div>
 
@@ -621,7 +607,7 @@ export function MiniMap({ playerRef, currentLocation = "outside" }) {
               letterSpacing: "0.4px"
             }}
           >
-            YOU
+            {t("hud.youMarker", {}, interfaceLanguage)}
           </span>
         </div>
       </div>

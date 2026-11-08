@@ -1,5 +1,11 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import { getRecentMissionHistory } from "../../services/progressService";
+import {
+  t,
+  resolveUserLanguagePreferences,
+  getLanguageName,
+  getLevelName
+} from "../../services/i18n";
 
 /**
  * Safely formats Firestore Timestamp, JS Date, numeric timestamp, or ISO string.
@@ -40,7 +46,13 @@ function formatTimestamp(ts) {
   }
 }
 
-export function ProgressPanelModal({ open, onClose, authUser, userProfile }) {
+export function ProgressPanelModal({
+  open,
+  onClose,
+  authUser,
+  userProfile,
+  interfaceLanguage: propInterfaceLanguage
+}) {
   const [history, setHistory] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -48,6 +60,17 @@ export function ProgressPanelModal({ open, onClose, authUser, userProfile }) {
   const activeUidRef = useRef(null);
   const previousOpenRef = useRef(false);
   const previousUidRef = useRef(null);
+
+  // Determine active interface and learning languages
+  const resolved = resolveUserLanguagePreferences(userProfile);
+  const interfaceLang = propInterfaceLanguage || resolved.interfaceLanguage || "en";
+  const learningLangId = resolved.learningLanguage;
+  const learningLevelId = resolved.learningLevel;
+
+  const interfaceLangRef = useRef(interfaceLang);
+  useEffect(() => {
+    interfaceLangRef.current = interfaceLang;
+  }, [interfaceLang]);
 
   const fetchHistory = useCallback(async (uid) => {
     if (!uid) return;
@@ -62,14 +85,14 @@ export function ProgressPanelModal({ open, onClose, authUser, userProfile }) {
       }
     } catch (err) {
       if (activeUidRef.current === uid) {
-        setError(err?.friendlyMessage || "Missiya tarixini yuklashda xatolik yuz berdi.");
+        setError(err?.friendlyMessage || t("stats.errorHistory", {}, interfaceLangRef.current));
       }
     } finally {
       if (activeUidRef.current === uid) {
         setLoading(false);
       }
     }
-  }, []);
+  }, [interfaceLangRef]);
 
   // Fetch only when modal transitions from closed to open, or if user changes
   useEffect(() => {
@@ -113,14 +136,82 @@ export function ProgressPanelModal({ open, onClose, authUser, userProfile }) {
       ? stats.averageScore
       : 0;
 
+  const streak = userProfile?.streak || {};
+  const currentStreak =
+    typeof streak.current === "number" && Number.isFinite(streak.current) && streak.current >= 0
+      ? streak.current
+      : 0;
+  const longestStreak =
+    typeof streak.longest === "number" && Number.isFinite(streak.longest) && streak.longest >= 0
+      ? streak.longest
+      : 0;
+
+  const achievementsData = userProfile?.achievements || {};
+
+  const achievementDefinitions = [
+    {
+      id: "first_mission",
+      title: t("achievements.first_mission.title", {}, interfaceLang),
+      subtitle: t("achievements.first_mission.subtitle", {}, interfaceLang),
+      icon: "🎯",
+      description: t("achievements.first_mission.description", {}, interfaceLang),
+      unlocked: Boolean(achievementsData.first_mission?.unlocked) || completedMissions >= 1,
+      unlockedAt: achievementsData.first_mission?.unlockedAt,
+      progressText: `${Math.min(completedMissions, 1)} / 1`,
+      progressPercent: completedMissions >= 1 ? 100 : 0
+    },
+    {
+      id: "xp_500",
+      title: t("achievements.xp_500.title", {}, interfaceLang),
+      subtitle: t("achievements.xp_500.subtitle", {}, interfaceLang),
+      icon: "⚡",
+      description: t("achievements.xp_500.description", {}, interfaceLang),
+      unlocked: Boolean(achievementsData.xp_500?.unlocked) || totalXP >= 500,
+      unlockedAt: achievementsData.xp_500?.unlockedAt,
+      progressText: `${Math.min(totalXP, 500)} / 500 XP`,
+      progressPercent: Math.min(100, Math.round((Math.min(totalXP, 500) / 500) * 100))
+    },
+    {
+      id: "perfect_score",
+      title: t("achievements.perfect_score.title", {}, interfaceLang),
+      subtitle: t("achievements.perfect_score.subtitle", {}, interfaceLang),
+      icon: "💯",
+      description: t("achievements.perfect_score.description", {}, interfaceLang),
+      unlocked: Boolean(achievementsData.perfect_score?.unlocked),
+      unlockedAt: achievementsData.perfect_score?.unlockedAt,
+      progressText: achievementsData.perfect_score?.unlocked ? "100 / 100" : "100 required",
+      progressPercent: achievementsData.perfect_score?.unlocked ? 100 : 0
+    },
+    {
+      id: "missions_10",
+      title: t("achievements.missions_10.title", {}, interfaceLang),
+      subtitle: t("achievements.missions_10.subtitle", {}, interfaceLang),
+      icon: "🏅",
+      description: t("achievements.missions_10.description", {}, interfaceLang),
+      unlocked: Boolean(achievementsData.missions_10?.unlocked) || completedMissions >= 10,
+      unlockedAt: achievementsData.missions_10?.unlockedAt,
+      progressText: `${Math.min(completedMissions, 10)} / 10`,
+      progressPercent: Math.min(100, Math.round((Math.min(completedMissions, 10) / 10) * 100))
+    },
+    {
+      id: "streak_3",
+      title: t("achievements.streak_3.title", {}, interfaceLang),
+      subtitle: t("achievements.streak_3.subtitle", {}, interfaceLang),
+      icon: "🔥",
+      description: t("achievements.streak_3.description", {}, interfaceLang),
+      unlocked: Boolean(achievementsData.streak_3?.unlocked) || Math.max(currentStreak, longestStreak) >= 3,
+      unlockedAt: achievementsData.streak_3?.unlockedAt,
+      progressText: `${Math.min(Math.max(currentStreak, longestStreak), 3)} / 3 ${t("hud.streakDays", { count: 3 }, interfaceLang)}`,
+      progressPercent: Math.min(100, Math.round((Math.min(Math.max(currentStreak, longestStreak), 3) / 3) * 100))
+    }
+  ];
+
+  const unlockedCount = achievementDefinitions.filter((a) => a.unlocked).length;
+
   const displayName =
-    userProfile?.displayName || authUser?.displayName || authUser?.email?.split("@")[0] || "Student";
-  const learningLang =
-    userProfile?.learningPreferences?.language === "ko" ? "🇰🇷 Koreys tili" : "🇺🇸 Ingliz tili";
-  const learningLevel = userProfile?.learningPreferences?.level
-    ? userProfile.learningPreferences.level.charAt(0).toUpperCase() +
-      userProfile.learningPreferences.level.slice(1)
-    : "Intermediate";
+    userProfile?.displayName || authUser?.displayName || authUser?.email?.split("@")[0] || t("common.student", {}, interfaceLang);
+  const learningLangLabel = `${learningLangId === "ko" ? "🇰🇷" : "🇺🇸"} ${getLanguageName(learningLangId, interfaceLang)}`;
+  const learningLevelLabel = getLevelName(learningLevelId, interfaceLang);
 
   return (
     <div
@@ -190,16 +281,16 @@ export function ProgressPanelModal({ open, onClose, authUser, userProfile }) {
                 {displayName}
               </div>
               <div style={{ fontSize: "12px", color: "#94a3b8", display: "flex", gap: "8px", marginTop: "2px" }}>
-                <span>{learningLang}</span>
+                <span>{learningLangLabel}</span>
                 <span>•</span>
-                <span style={{ color: "#60a5fa", fontWeight: "600" }}>{learningLevel}</span>
+                <span style={{ color: "#60a5fa", fontWeight: "600" }}>{learningLevelLabel}</span>
               </div>
             </div>
           </div>
 
           <button
             onClick={onClose}
-            aria-label="Yopish"
+            aria-label={t("common.close", {}, interfaceLang)}
             style={{
               background: "rgba(255, 255, 255, 0.06)",
               border: "1px solid rgba(255, 255, 255, 0.12)",
@@ -225,8 +316,8 @@ export function ProgressPanelModal({ open, onClose, authUser, userProfile }) {
           <div
             style={{
               display: "grid",
-              gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))",
-              gap: "12px",
+              gridTemplateColumns: "repeat(auto-fit, minmax(105px, 1fr))",
+              gap: "10px",
               marginBottom: "24px"
             }}
           >
@@ -236,18 +327,39 @@ export function ProgressPanelModal({ open, onClose, authUser, userProfile }) {
                 background: "rgba(234, 179, 8, 0.08)",
                 border: "1px solid rgba(234, 179, 8, 0.25)",
                 borderRadius: "14px",
-                padding: "14px",
+                padding: "12px 10px",
                 textAlign: "center"
               }}
             >
-              <div style={{ fontSize: "11px", fontWeight: "600", color: "#fde047", textTransform: "uppercase", letterSpacing: "0.05em" }}>
-                Jami XP
+              <div style={{ fontSize: "10px", fontWeight: "600", color: "#fde047", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                {t("stats.totalXpLabel", {}, interfaceLang)}
               </div>
-              <div style={{ fontSize: "22px", fontWeight: "800", color: "#fef08a", marginTop: "4px" }}>
+              <div style={{ fontSize: "20px", fontWeight: "800", color: "#fef08a", marginTop: "4px" }}>
                 ⚡ {totalXP}
               </div>
               <div style={{ fontSize: "11px", color: "#a1a1aa", marginTop: "2px" }}>
-                XP ballari
+                {t("hud.xpLabel", { count: totalXP }, interfaceLang)}
+              </div>
+            </div>
+
+            {/* Streak Card */}
+            <div
+              style={{
+                background: "rgba(249, 115, 22, 0.08)",
+                border: "1px solid rgba(249, 115, 22, 0.25)",
+                borderRadius: "14px",
+                padding: "12px 10px",
+                textAlign: "center"
+              }}
+            >
+              <div style={{ fontSize: "10px", fontWeight: "600", color: "#fdba74", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                {t("stats.currentStreakLabel", {}, interfaceLang)}
+              </div>
+              <div style={{ fontSize: "20px", fontWeight: "800", color: "#fb923c", marginTop: "4px" }}>
+                🔥 {currentStreak}d
+              </div>
+              <div style={{ fontSize: "11px", color: "#a1a1aa", marginTop: "2px" }}>
+                Max: {longestStreak}d
               </div>
             </div>
 
@@ -257,18 +369,18 @@ export function ProgressPanelModal({ open, onClose, authUser, userProfile }) {
                 background: "rgba(34, 197, 94, 0.08)",
                 border: "1px solid rgba(34, 197, 94, 0.25)",
                 borderRadius: "14px",
-                padding: "14px",
+                padding: "12px 10px",
                 textAlign: "center"
               }}
             >
-              <div style={{ fontSize: "11px", fontWeight: "600", color: "#86efac", textTransform: "uppercase", letterSpacing: "0.05em" }}>
-                Bajarildi
+              <div style={{ fontSize: "10px", fontWeight: "600", color: "#86efac", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                {t("stats.completedMissionsLabel", {}, interfaceLang)}
               </div>
-              <div style={{ fontSize: "22px", fontWeight: "800", color: "#4ade80", marginTop: "4px" }}>
+              <div style={{ fontSize: "20px", fontWeight: "800", color: "#4ade80", marginTop: "4px" }}>
                 ✅ {completedMissions}
               </div>
               <div style={{ fontSize: "11px", color: "#a1a1aa", marginTop: "2px" }}>
-                Muvaffaqiyatli
+                {t("stats.passBadge", {}, interfaceLang)}
               </div>
             </div>
 
@@ -278,18 +390,18 @@ export function ProgressPanelModal({ open, onClose, authUser, userProfile }) {
                 background: "rgba(59, 130, 246, 0.08)",
                 border: "1px solid rgba(59, 130, 246, 0.25)",
                 borderRadius: "14px",
-                padding: "14px",
+                padding: "12px 10px",
                 textAlign: "center"
               }}
             >
-              <div style={{ fontSize: "11px", fontWeight: "600", color: "#93c5fd", textTransform: "uppercase", letterSpacing: "0.05em" }}>
-                Urinishlar
+              <div style={{ fontSize: "10px", fontWeight: "600", color: "#93c5fd", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                {t("stats.totalAttemptsLabel", {}, interfaceLang)}
               </div>
-              <div style={{ fontSize: "22px", fontWeight: "800", color: "#60a5fa", marginTop: "4px" }}>
+              <div style={{ fontSize: "20px", fontWeight: "800", color: "#60a5fa", marginTop: "4px" }}>
                 🎯 {totalAttempts}
               </div>
               <div style={{ fontSize: "11px", color: "#a1a1aa", marginTop: "2px" }}>
-                Jami sessiyalar
+                {t("common.statistics", {}, interfaceLang)}
               </div>
             </div>
 
@@ -299,19 +411,182 @@ export function ProgressPanelModal({ open, onClose, authUser, userProfile }) {
                 background: "rgba(168, 85, 247, 0.08)",
                 border: "1px solid rgba(168, 85, 247, 0.25)",
                 borderRadius: "14px",
-                padding: "14px",
+                padding: "12px 10px",
                 textAlign: "center"
               }}
             >
-              <div style={{ fontSize: "11px", fontWeight: "600", color: "#d8b4fe", textTransform: "uppercase", letterSpacing: "0.05em" }}>
-                O‘rtacha Ball
+              <div style={{ fontSize: "10px", fontWeight: "600", color: "#d8b4fe", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                {t("stats.averageScoreLabel", {}, interfaceLang)}
               </div>
-              <div style={{ fontSize: "22px", fontWeight: "800", color: "#c084fc", marginTop: "4px" }}>
+              <div style={{ fontSize: "20px", fontWeight: "800", color: "#c084fc", marginTop: "4px" }}>
                 📈 {averageScore}%
               </div>
               <div style={{ fontSize: "11px", color: "#a1a1aa", marginTop: "2px" }}>
-                O‘rtacha ko‘rsatkich
+                {t("stats.scoreDisplay", { score: averageScore }, interfaceLang)}
               </div>
+            </div>
+          </div>
+
+          {/* Section: Achievements */}
+          <div style={{ marginBottom: "26px" }}>
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                marginBottom: "12px"
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                <h3 style={{ margin: 0, fontSize: "15px", fontWeight: "700", color: "#f8fafc" }}>
+                  🏆 {t("stats.achievementsTitle", {}, interfaceLang)}
+                </h3>
+              </div>
+              <span
+                style={{
+                  fontSize: "11px",
+                  fontWeight: "700",
+                  padding: "3px 9px",
+                  borderRadius: "8px",
+                  background: unlockedCount === 5 ? "rgba(34, 197, 94, 0.15)" : "rgba(234, 179, 8, 0.15)",
+                  color: unlockedCount === 5 ? "#4ade80" : "#fde047",
+                  border: unlockedCount === 5 ? "1px solid rgba(34, 197, 94, 0.35)" : "1px solid rgba(234, 179, 8, 0.35)"
+                }}
+              >
+                {t("stats.unlockedCounter", { unlocked: unlockedCount, total: 5 }, interfaceLang)}
+              </span>
+            </div>
+
+            <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+              {achievementDefinitions.map((ach) => {
+                const dateText = ach.unlockedAt ? formatTimestamp(ach.unlockedAt) : null;
+
+                return (
+                  <div
+                    key={ach.id}
+                    style={{
+                      padding: "12px 14px",
+                      borderRadius: "14px",
+                      background: ach.unlocked
+                        ? "linear-gradient(135deg, rgba(34, 197, 94, 0.08), rgba(234, 179, 8, 0.05))"
+                        : "rgba(255, 255, 255, 0.02)",
+                      border: ach.unlocked
+                        ? "1px solid rgba(34, 197, 94, 0.28)"
+                        : "1px solid rgba(255, 255, 255, 0.07)",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "12px",
+                      transition: "all 0.15s ease"
+                    }}
+                  >
+                    {/* Achievement Icon */}
+                    <div
+                      style={{
+                        width: "40px",
+                        height: "40px",
+                        borderRadius: "12px",
+                        background: ach.unlocked
+                          ? "linear-gradient(135deg, rgba(34, 197, 94, 0.2), rgba(234, 179, 8, 0.2))"
+                          : "rgba(255, 255, 255, 0.04)",
+                        border: ach.unlocked
+                          ? "1px solid rgba(34, 197, 94, 0.4)"
+                          : "1px solid rgba(255, 255, 255, 0.1)",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        fontSize: "20px",
+                        flexShrink: 0,
+                        filter: ach.unlocked ? "none" : "grayscale(80%) opacity(0.6)"
+                      }}
+                    >
+                      {ach.icon}
+                    </div>
+
+                    {/* Achievement Details */}
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "8px" }}>
+                        <div style={{ fontSize: "13px", fontWeight: "700", color: ach.unlocked ? "#f8fafc" : "#cbd5e1" }}>
+                          {ach.title}
+                          <span style={{ fontSize: "11px", fontWeight: "500", color: "#94a3b8", marginLeft: "6px" }}>
+                            ({ach.subtitle})
+                          </span>
+                        </div>
+
+                        {/* Status Tag */}
+                        {ach.unlocked ? (
+                          <span
+                            style={{
+                              fontSize: "11px",
+                              fontWeight: "700",
+                              color: "#4ade80",
+                              background: "rgba(34, 197, 94, 0.15)",
+                              padding: "2px 7px",
+                              borderRadius: "6px",
+                              border: "1px solid rgba(34, 197, 94, 0.3)",
+                              flexShrink: 0
+                            }}
+                          >
+                            ✓ {t("stats.passBadge", {}, interfaceLang)}
+                          </span>
+                        ) : (
+                          <span
+                            style={{
+                              fontSize: "11px",
+                              fontWeight: "600",
+                              color: "#94a3b8",
+                              background: "rgba(255, 255, 255, 0.05)",
+                              padding: "2px 7px",
+                              borderRadius: "6px",
+                              border: "1px solid rgba(255, 255, 255, 0.09)",
+                              flexShrink: 0
+                            }}
+                          >
+                            🔒 {ach.progressText}
+                          </span>
+                        )}
+                      </div>
+
+                      <div style={{ fontSize: "11px", color: "#94a3b8", marginTop: "2px", lineHeight: "1.3" }}>
+                        {ach.description}
+                      </div>
+
+                      {/* Progress Bar (when locked) or Unlock Date (when unlocked) */}
+                      {ach.unlocked ? (
+                        dateText && dateText !== "—" && (
+                          <div style={{ fontSize: "10px", color: "#6ee7b7", marginTop: "4px" }}>
+                            📅 {t("stats.attemptDate", { date: dateText }, interfaceLang)}
+                          </div>
+                        )
+                      ) : (
+                        <div style={{ marginTop: "6px", display: "flex", alignItems: "center", gap: "8px" }}>
+                          <div
+                            style={{
+                              flex: 1,
+                              height: "5px",
+                              background: "rgba(255, 255, 255, 0.08)",
+                              borderRadius: "3px",
+                              overflow: "hidden"
+                            }}
+                          >
+                            <div
+                              style={{
+                                width: `${ach.progressPercent}%`,
+                                height: "100%",
+                                background: "linear-gradient(90deg, #3b82f6, #60a5fa)",
+                                borderRadius: "3px",
+                                transition: "width 0.3s ease"
+                              }}
+                            />
+                          </div>
+                          <span style={{ fontSize: "10px", color: "#94a3b8", minWidth: "30px", textAlign: "right" }}>
+                            {ach.progressPercent}%
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </div>
 
@@ -326,11 +601,8 @@ export function ProgressPanelModal({ open, onClose, authUser, userProfile }) {
               }}
             >
               <h3 style={{ margin: 0, fontSize: "15px", fontWeight: "700", color: "#f8fafc" }}>
-                Oxirgi vazifalar tarixi
+                {t("stats.recentHistoryTitle", {}, interfaceLang)}
               </h3>
-              <span style={{ fontSize: "12px", color: "#94a3b8" }}>
-                So‘nggi 5 ta yozuv
-              </span>
             </div>
 
             {/* Loading State */}
@@ -346,7 +618,7 @@ export function ProgressPanelModal({ open, onClose, authUser, userProfile }) {
               >
                 <div style={{ fontSize: "26px", marginBottom: "8px" }}>⏳</div>
                 <div style={{ fontSize: "14px", color: "#93c5fd", fontWeight: "500" }}>
-                  Missiya tarixi yuklanmoqda...
+                  {t("stats.loadingHistory", {}, interfaceLang)}
                 </div>
               </div>
             )}
@@ -382,7 +654,7 @@ export function ProgressPanelModal({ open, onClose, authUser, userProfile }) {
                     cursor: "pointer"
                   }}
                 >
-                  🔄 Qayta urinish
+                  🔄 {t("common.retry", {}, interfaceLang)}
                 </button>
               </div>
             )}
@@ -399,11 +671,8 @@ export function ProgressPanelModal({ open, onClose, authUser, userProfile }) {
                 }}
               >
                 <div style={{ fontSize: "32px", marginBottom: "8px" }}>📋</div>
-                <div style={{ fontSize: "15px", fontWeight: "600", color: "#f8fafc", marginBottom: "6px" }}>
-                  Hozircha vazifalar bajarilmagan
-                </div>
                 <div style={{ fontSize: "13px", color: "#94a3b8", maxWidth: "420px", margin: "0 auto", lineHeight: 1.4 }}>
-                  Qishloqdagi istalgan binoga (Do‘kon, Qahvaxona, Kutubxona...) kiring, NPC bilan suhbatlashing va birinchi missiyangizni bajaring!
+                  {t("stats.emptyHistory", {}, interfaceLang)}
                 </div>
               </div>
             )}
@@ -415,7 +684,7 @@ export function ProgressPanelModal({ open, onClose, authUser, userProfile }) {
                   const isCompleted = Boolean(rec.completed);
                   const score = typeof rec.score === "number" ? rec.score : 0;
                   const xp = typeof rec.xpEarned === "number" ? rec.xpEarned : 0;
-                  const title = rec.missionTitle || (rec.facility ? `${rec.facility} Missiyasi` : "Qishloq vazifasi");
+                  const title = rec.missionTitle || (rec.facility ? `${rec.facility} Mission` : "Village Mission");
                   const dateStr = formatTimestamp(rec.timestamp);
 
                   return (
@@ -456,7 +725,7 @@ export function ProgressPanelModal({ open, onClose, authUser, userProfile }) {
                               border: xp > 0 ? "1px solid rgba(234, 179, 8, 0.35)" : "1px solid rgba(255, 255, 255, 0.1)"
                             }}
                           >
-                            +{xp} XP
+                            {t("stats.xpAwarded", { xp }, interfaceLang)}
                           </span>
 
                           {/* Score Badge */}
@@ -490,7 +759,7 @@ export function ProgressPanelModal({ open, onClose, authUser, userProfile }) {
                               color: isCompleted ? "#4ade80" : "#94a3b8"
                             }}
                           >
-                            {isCompleted ? "Bajarildi" : "Tugallanmadi"}
+                            {isCompleted ? t("stats.passBadge", {}, interfaceLang) : t("stats.retryBadge", {}, interfaceLang)}
                           </span>
                         </div>
                       </div>
@@ -542,7 +811,7 @@ export function ProgressPanelModal({ open, onClose, authUser, userProfile }) {
               transition: "all 0.15s ease"
             }}
           >
-            Yopish
+            {t("common.close", {}, interfaceLang)}
           </button>
         </div>
       </div>

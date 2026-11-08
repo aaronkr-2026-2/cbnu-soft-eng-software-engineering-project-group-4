@@ -407,7 +407,7 @@ export function CommunityCenter({ isTalking = false, currentLocation = "outside"
   if (!isInside) return null;
 
   return (
-    <group>
+    <group position={[2.3, 0, 2.0]}>
       {/* ============================================================ */}
       {/* 1. CIVIC LIGHTING (Max 2 Lightweight Lights, No Shadows)      */}
       {/* ============================================================ */}

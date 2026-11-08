@@ -51,18 +51,18 @@ const VILLAGE_TREES = [
   { x: 22.0,  z: 14.5, scale: 0.90, rotY: 0.8 },
 
   // 7. Trees around New North Residential Area (framing perimeter and community park)
-  { x: -17.5, z: 35.5, scale: 1.05, rotY: 0.8 },
-  { x: -17.5, z: 41.5, scale: 0.95, rotY: 2.3 },
-  { x: -10.8, z: 45.2, scale: 1.10, rotY: 3.4 },
-  { x: -5.5,  z: 42.5, scale: 1.00, rotY: 4.1 },
-  { x: 0.0,   z: 42.5, scale: 1.15, rotY: 1.6 },
-  { x: 5.5,   z: 42.5, scale: 1.00, rotY: 3.2 },
-  { x: 10.8,  z: 45.2, scale: 1.10, rotY: 1.8 },
-  { x: 17.5,  z: 41.5, scale: 1.05, rotY: 5.0 },
-  { x: 17.5,  z: 35.5, scale: 0.95, rotY: 1.1 },
-  // Community park lawn trees (placed on green lawn, clearing paved plaza & walkways)
-  { x: -5.0,  z: 34.2, scale: 1.05, rotY: 2.7 },
-  { x: 4.8,   z: 34.2, scale: 0.95, rotY: 1.2 }
+  { x: -28.0, z: 35.5, scale: 1.05, rotY: 0.8 },
+  { x: -28.0, z: 42.5, scale: 0.95, rotY: 2.3 },
+  { x: -16.0, z: 53.5, scale: 1.10, rotY: 3.4 },
+  { x: -4.0,  z: 44.0, scale: 1.00, rotY: 4.1 },
+  { x: 0.0,   z: 43.5, scale: 1.15, rotY: 1.6 },
+  { x: 4.0,   z: 44.0, scale: 1.00, rotY: 3.2 },
+  { x: 16.0,  z: 53.5, scale: 1.10, rotY: 1.8 },
+  { x: 28.0,  z: 42.5, scale: 1.05, rotY: 5.0 },
+  { x: 28.0,  z: 35.5, scale: 0.95, rotY: 1.1 },
+  // Community park lawn trees (placed safely on green lawn, clearing paved plaza & walkways)
+  { x: -3.5,  z: 39.5, scale: 1.05, rotY: 2.7 },
+  { x: 3.5,   z: 39.5, scale: 0.95, rotY: 1.2 }
 ];
 
 /**

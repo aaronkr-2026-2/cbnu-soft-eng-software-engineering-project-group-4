@@ -1,7 +1,7 @@
 import React, { useMemo } from "react";
 import * as THREE from "three";
 import { useGLTF } from "@react-three/drei";
-import { VILLAGE_BUILDINGS } from "./villageBuildingsConfig";
+import { VILLAGE_BUILDINGS, DISTRICT_STEPS } from "./villageBuildingsConfig";
 import { VillageSigns } from "./VillageSigns";
 
 /**
@@ -29,8 +29,6 @@ export function VillageBuilding({
       modelPath.includes("building-type-k");
 
     if (isSkyscraper) {
-      // Skyscraper has ~1,200 meshes. Disable castShadow and receiveShadow
-      // to eliminate 1,200 shadow-map passes and optimize rendering performance.
       scene.traverse((child) => {
         if (child.isMesh) {
           child.castShadow = false;
@@ -40,13 +38,11 @@ export function VillageBuilding({
           }
         }
       });
-      // Normalize pivot: compute raw bounding box and offset so the footprint center is (0, 0) and base is Y=0.
       const box = new THREE.Box3().setFromObject(scene);
       const center = new THREE.Vector3();
       box.getCenter(center);
       scene.position.set(-center.x, -box.min.y, -center.z);
     } else if (isDistrictBuilding) {
-      // Performance optimization: do not add dynamic shadows to new district buildings (F - K)
       scene.traverse((child) => {
         if (child.isMesh) {
           child.castShadow = false;
@@ -77,16 +73,6 @@ export function VillageBuilding({
     </group>
   );
 }
-
-// Entrance step thresholds for the 6 Education & Community District buildings (F - K)
-const DISTRICT_STEPS = [
-  { id: "step-lang", position: [-14.4, 0.04, 33.1] },
-  { id: "step-study", position: [-7.5, 0.04, 33.4] },
-  { id: "step-comm", position: [7.2, 0.04, 33.9] },
-  { id: "step-career", position: [14.4, 0.04, 33.6] },
-  { id: "step-act", position: [-10.8, 0.04, 39.8] },
-  { id: "step-hall", position: [10.8, 0.04, 39.4] }
-];
 
 /**
  * VillageBuildings: Renders all modular village houses (Types A through E)

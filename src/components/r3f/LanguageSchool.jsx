@@ -490,7 +490,7 @@ export function LanguageSchool({ isTalking = false, currentLocation = "outside" 
   if (!isInside) return null;
 
   return (
-    <group>
+    <group position={[-7.6, 0, 2.0]}>
       {/* ============================================================ */}
       {/* 1. CLASSROOM LIGHTING (Max 2 Lightweight Lights, No Shadows) */}
       {/* ============================================================ */}

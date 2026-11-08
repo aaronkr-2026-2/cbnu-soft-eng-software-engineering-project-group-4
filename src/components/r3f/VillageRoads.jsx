@@ -245,15 +245,15 @@ export function VillageRoads() {
 
       {/* 6.2 North Residential Street (Running East-West behind Police Station and Hospital) */}
       <SurfaceSegment
-        position={[-0.75, 28.0]}
-        args={[30.5, 6.0]}
+        position={[0.0, 28.0]}
+        args={[52.0, 6.0]}
         color="#26282a"
         y={0.02}
         roughness={0.9}
       />
 
       {/* North Residential Street Center Dashes */}
-      {[-14.0, -10.0, -6.0, -2.0, 2.0, 6.0, 10.0].map((xVal, idx) => (
+      {[-22.0, -18.0, -14.0, -10.0, -6.0, -2.0, 2.0, 6.0, 10.0, 14.0, 18.0, 22.0].map((xVal, idx) => (
         <SurfaceSegment
           key={`nrs-dash-${idx}`}
           position={[xVal, 28.0]}
@@ -264,16 +264,16 @@ export function VillageRoads() {
         />
       ))}
 
-      {/* North Residential Sidewalk (Paved pedestrian frontage for future houses) */}
+      {/* North Residential Sidewalk (Paved pedestrian frontage connecting all district facilities) */}
       <SurfaceSegment
-        position={[-0.75, 31.75]}
-        args={[30.5, 1.5]}
+        position={[0.0, 31.8]}
+        args={[54.0, 1.6]}
         color="#5c646b"
         y={0.023}
       />
 
       {/* North Street Curbs */}
-      <CurbSegment position={[-0.75, 31.0]} length={30.5} axis="x" />
+      <CurbSegment position={[0.0, 31.0]} length={54.0} axis="x" />
       {/* South Curbs behind Hospital (leaving alley gap at X in [-1.6, 0.45]) */}
       <CurbSegment position={[-8.8, 25.0]} length={14.4} axis="x" />
       {/* South Curbs behind Police Station */}
@@ -289,14 +289,14 @@ export function VillageRoads() {
 
       {/* 6.4 Community Green Park Plaza in the new residential area */}
       <SurfaceSegment
-        position={[-0.75, 36.5]}
-        args={[8.8, 7.0]}
+        position={[0.0, 37.0]}
+        args={[9.0, 8.0]}
         color="#4b5563"
         y={0.024}
       />
       <SurfaceSegment
-        position={[-0.75, 32.75]}
-        args={[2.4, 1.0]}
+        position={[0.0, 32.75]}
+        args={[3.0, 1.2]}
         color="#5c646b"
         y={0.025}
       />
@@ -304,58 +304,58 @@ export function VillageRoads() {
       {/* 6.5 Pedestrian paths connecting the 6 district buildings to the sidewalk */}
       {/* Front approach paths: Language School (F) & Study Center (G) [West Campus] */}
       <SurfaceSegment
-        position={[-14.4, 33.25]}
-        args={[1.6, 1.5]}
+        position={[-22.0, 33.1]}
+        args={[2.6, 1.4]}
         color="#5c646b"
         y={0.024}
       />
       <SurfaceSegment
-        position={[-7.5, 33.25]}
-        args={[1.6, 1.5]}
+        position={[-9.5, 33.2]}
+        args={[2.6, 1.4]}
         color="#5c646b"
         y={0.024}
       />
 
       {/* Front approach paths: Community Center (H) & Career Center (I) [East Campus] */}
       <SurfaceSegment
-        position={[7.2, 33.4]}
-        args={[1.6, 1.8]}
+        position={[9.5, 33.2]}
+        args={[2.6, 1.4]}
         color="#5c646b"
         y={0.024}
       />
       <SurfaceSegment
-        position={[14.4, 33.25]}
-        args={[1.6, 1.5]}
+        position={[22.0, 33.1]}
+        args={[2.6, 1.4]}
         color="#5c646b"
         y={0.024}
       />
 
-      {/* West Cul-de-Sac Lane (Connecting North Sidewalk to Activity Center J) */}
+      {/* West Pedestrian Avenue (Connecting North Sidewalk to Activity Center J) */}
       <SurfaceSegment
-        position={[-10.8, 36.5]}
-        args={[1.6, 8.0]}
+        position={[-16.0, 38.5]}
+        args={[2.8, 12.5]}
         color="#525a61"
         y={0.024}
       />
       {/* Activity Center (J) front walk/porch */}
       <SurfaceSegment
-        position={[-10.8, 39.8]}
-        args={[2.4, 1.4]}
+        position={[-16.0, 44.7]}
+        args={[3.4, 1.4]}
         color="#5c646b"
         y={0.025}
       />
 
-      {/* East Cul-de-Sac Lane (Connecting North Sidewalk to Multi-Purpose Hall K) */}
+      {/* East Pedestrian Avenue (Connecting North Sidewalk to Multi-Purpose Hall K) */}
       <SurfaceSegment
-        position={[10.8, 36.5]}
-        args={[1.6, 8.0]}
+        position={[16.0, 38.5]}
+        args={[2.8, 12.5]}
         color="#525a61"
         y={0.024}
       />
       {/* Multi-Purpose Hall (K) front walk/porch */}
       <SurfaceSegment
-        position={[10.8, 39.4]}
-        args={[2.4, 1.4]}
+        position={[16.0, 44.5]}
+        args={[3.4, 1.4]}
         color="#5c646b"
         y={0.025}
       />
@@ -363,15 +363,15 @@ export function VillageRoads() {
       {/* 6.6 Cross-Plaza Pedestrian Connectors (Unifying the 6 District Buildings) */}
       {/* West Plaza Connector: Links Community Plaza to Study Center & West Lane */}
       <SurfaceSegment
-        position={[-8.0, 36.8]}
-        args={[4.2, 1.4]}
+        position={[-7.0, 37.0]}
+        args={[4.8, 1.6]}
         color="#525a61"
         y={0.024}
       />
-      {/* East Plaza Connector: Links Community Plaza to Career Center & East Lane */}
+      {/* East Plaza Connector: Links Community Plaza to Community Center & East Lane */}
       <SurfaceSegment
-        position={[6.5, 36.8]}
-        args={[4.2, 1.4]}
+        position={[7.0, 37.0]}
+        args={[4.8, 1.6]}
         color="#525a61"
         y={0.024}
       />

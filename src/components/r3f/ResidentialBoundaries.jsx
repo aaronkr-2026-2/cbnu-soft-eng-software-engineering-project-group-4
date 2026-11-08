@@ -84,21 +84,21 @@ const GATE_PILLARS = [
   { position: [-6.2, 0, 13.0], hasMailbox: false },
 
   // --- Education & Community District Entrance Pillars (Front Sidewalk Z = 32.6) ---
-  // Language School Pillars (West side)
-  { position: [-15.4, 0, 32.6], hasMailbox: false },
-  { position: [-13.4, 0, 32.6], hasMailbox: false },
+  // Language School Pillars (West side, centered around X = -22.0)
+  { position: [-23.1, 0, 32.6], hasMailbox: false },
+  { position: [-20.9, 0, 32.6], hasMailbox: false },
 
-  // Study Center Pillars (West plaza-side)
-  { position: [-8.5, 0, 32.6], hasMailbox: false },
-  { position: [-6.5, 0, 32.6], hasMailbox: false },
+  // Study Center Pillars (West plaza-side, centered around X = -9.5)
+  { position: [-10.6, 0, 32.6], hasMailbox: false },
+  { position: [-8.4, 0, 32.6], hasMailbox: false },
 
-  // Community Center Pillars (East plaza-side)
-  { position: [6.2, 0, 32.6], hasMailbox: false },
-  { position: [8.2, 0, 32.6], hasMailbox: false },
+  // Community Center Pillars (East plaza-side, centered around X = 9.5)
+  { position: [8.4, 0, 32.6], hasMailbox: false },
+  { position: [10.6, 0, 32.6], hasMailbox: false },
 
-  // Career Center Pillars (East roadside)
-  { position: [13.4, 0, 32.6], hasMailbox: false },
-  { position: [15.4, 0, 32.6], hasMailbox: false }
+  // Career Center Pillars (East roadside, centered around X = 22.0)
+  { position: [20.9, 0, 32.6], hasMailbox: false },
+  { position: [23.1, 0, 32.6], hasMailbox: false }
 ];
 
 // Reorganized Low Boundary Wall Sections snugly framing property lots
@@ -133,32 +133,33 @@ const BOUNDARY_WALLS = [
   { position: [-1.6, 17.25], length: 8.5, axis: "z" },
 
   // --- Education & Community District Low Front Walls (Z = 32.6) ---
-  { position: [-16.2, 32.6], length: 1.4, axis: "x" },
-  { position: [-5.7, 32.6], length: 1.4, axis: "x" },
-  { position: [5.4, 32.6], length: 1.4, axis: "x" },
-  { position: [16.2, 32.6], length: 1.4, axis: "x" }
+  // Positioned outside entrance portals without blocking any pedestrian avenues or pathways
+  { position: [-25.2, 32.6], length: 2.4, axis: "x" },
+  { position: [-6.0, 32.6], length: 2.4, axis: "x" },
+  { position: [6.0, 32.6], length: 2.4, axis: "x" },
+  { position: [25.2, 32.6], length: 2.4, axis: "x" }
 ];
 
 // Low-poly greenery bushes
 const DISTRICT_BUSHES = [
   // Language School yard (F)
-  { position: [-16.0, 0, 34.0], scale: 1.1, color: "#16a34a" },
-  { position: [-12.8, 0, 34.0], scale: 0.9, color: "#22c55e" },
+  { position: [-24.5, 0, 34.5], scale: 1.1, color: "#16a34a" },
+  { position: [-19.5, 0, 34.5], scale: 0.9, color: "#22c55e" },
   // Study Center yard (G)
-  { position: [-8.8, 0, 34.0], scale: 1.0, color: "#15803d" },
-  { position: [-6.2, 0, 34.0], scale: 0.9, color: "#22c55e" },
+  { position: [-12.0, 0, 34.5], scale: 1.0, color: "#15803d" },
+  { position: [-7.0, 0, 34.5], scale: 0.9, color: "#22c55e" },
   // Activity Center yard (J)
-  { position: [-12.2, 0, 40.2], scale: 1.05, color: "#16a34a" },
-  { position: [-9.4, 0, 40.2], scale: 0.85, color: "#15803d" },
+  { position: [-18.5, 0, 47.0], scale: 1.05, color: "#16a34a" },
+  { position: [-13.5, 0, 47.0], scale: 0.85, color: "#15803d" },
   // Community Center yard (H)
-  { position: [5.8, 0, 34.0], scale: 0.9, color: "#22c55e" },
-  { position: [8.6, 0, 34.0], scale: 1.05, color: "#16a34a" },
+  { position: [7.0, 0, 34.5], scale: 0.9, color: "#22c55e" },
+  { position: [12.0, 0, 34.5], scale: 1.05, color: "#16a34a" },
   // Career Center yard (I)
-  { position: [12.8, 0, 34.0], scale: 0.9, color: "#15803d" },
-  { position: [16.0, 0, 34.0], scale: 1.1, color: "#22c55e" },
+  { position: [19.5, 0, 34.5], scale: 0.9, color: "#15803d" },
+  { position: [24.5, 0, 34.5], scale: 1.1, color: "#22c55e" },
   // Multi-Purpose Hall yard (K)
-  { position: [9.4, 0, 40.2], scale: 0.85, color: "#16a34a" },
-  { position: [12.2, 0, 40.2], scale: 1.0, color: "#15803d" }
+  { position: [13.5, 0, 47.0], scale: 0.85, color: "#16a34a" },
+  { position: [18.5, 0, 47.0], scale: 1.0, color: "#15803d" }
 ];
 
 function GardenBush({ position, scale = 1.0, color = "#22c55e" }) {
@@ -174,12 +175,12 @@ function GardenBush({ position, scale = 1.0, color = "#22c55e" }) {
 
 // 6 Freestanding Entrance Totems (F through K)
 const FACILITY_TOTEMS = [
-  { position: [-12.9, 0, 33.1], title: "Language School", subtitle: "어학원", accentColor: "#0284c7" },
-  { position: [-6.0, 0, 33.4], title: "Study Center", subtitle: "학습센터", accentColor: "#7c3aed" },
-  { position: [5.7, 0, 33.9], title: "Community Center", subtitle: "주민센터", accentColor: "#059669" },
-  { position: [12.9, 0, 33.6], title: "Career Center", subtitle: "취업지원센터", accentColor: "#d97706" },
-  { position: [-9.3, 0, 39.8], title: "Activity Center", subtitle: "활동센터", accentColor: "#e11d48" },
-  { position: [9.3, 0, 39.4], title: "Multi-Purpose Hall", subtitle: "다목적홀", accentColor: "#4f46e5" }
+  { position: [-20.4, 0, 33.2], title: "Language School", subtitle: "어학원", accentColor: "#0284c7" },
+  { position: [-7.9, 0, 33.2], title: "Study Center", subtitle: "학습센터", accentColor: "#7c3aed" },
+  { position: [7.9, 0, 33.2], title: "Community Center", subtitle: "주민센터", accentColor: "#059669" },
+  { position: [20.4, 0, 33.2], title: "Career Center", subtitle: "취업지원센터", accentColor: "#d97706" },
+  { position: [-14.5, 0, 44.5], title: "Activity Center", subtitle: "활동센터", accentColor: "#e11d48" },
+  { position: [14.5, 0, 44.5], title: "Multi-Purpose Hall", subtitle: "다목적홀", accentColor: "#4f46e5" }
 ];
 
 /**
@@ -456,22 +457,22 @@ export function ResidentialBoundaries() {
       ))}
 
       {/* Community Education Plaza: Central Directory Kiosk */}
-      <CentralDistrictDirectory position={[-0.75, 0, 33.7]} />
+      <CentralDistrictDirectory position={[0.0, 0, 33.7]} />
 
       {/* Community Education Plaza: Central Decorative Fountain */}
-      <PlazaFountain position={[-0.75, 0, 36.8]} />
+      <PlazaFountain position={[0.0, 0, 36.8]} />
 
       {/* Community Education Plaza: 4 Public Benches */}
-      <PlazaBench position={[-3.8, 0, 36.8]} rotation={[0, Math.PI / 2, 0]} />
-      <PlazaBench position={[2.3, 0, 36.8]} rotation={[0, -Math.PI / 2, 0]} />
-      <PlazaBench position={[-2.2, 0, 39.2]} rotation={[0, 0, 0]} />
-      <PlazaBench position={[0.7, 0, 39.2]} rotation={[0, 0, 0]} />
+      <PlazaBench position={[-3.2, 0, 36.8]} rotation={[0, Math.PI / 2, 0]} />
+      <PlazaBench position={[3.2, 0, 36.8]} rotation={[0, -Math.PI / 2, 0]} />
+      <PlazaBench position={[-1.6, 0, 39.5]} rotation={[0, 0, 0]} />
+      <PlazaBench position={[1.6, 0, 39.5]} rotation={[0, 0, 0]} />
 
       {/* Community Education Plaza: 4 Corner Flower Planters */}
-      <PlazaPlanter position={[-4.4, 0, 33.8]} flowerColor="#facc15" />
-      <PlazaPlanter position={[2.9, 0, 33.8]} flowerColor="#ec4899" />
-      <PlazaPlanter position={[-4.4, 0, 39.4]} flowerColor="#38bdf8" />
-      <PlazaPlanter position={[2.9, 0, 39.4]} flowerColor="#f87171" />
+      <PlazaPlanter position={[-3.8, 0, 33.8]} flowerColor="#facc15" />
+      <PlazaPlanter position={[3.8, 0, 33.8]} flowerColor="#ec4899" />
+      <PlazaPlanter position={[-3.8, 0, 39.5]} flowerColor="#38bdf8" />
+      <PlazaPlanter position={[3.8, 0, 39.5]} flowerColor="#f87171" />
     </group>
   );
 }

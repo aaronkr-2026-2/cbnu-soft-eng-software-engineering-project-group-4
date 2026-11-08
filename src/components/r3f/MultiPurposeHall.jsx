@@ -562,7 +562,7 @@ export function MultiPurposeHall({ isTalking = false, currentLocation = "outside
   if (!isInside) return null;
 
   return (
-    <group>
+    <group position={[5.2, 0, 6.7]}>
       {/* ============================================================ */}
       {/* 1. LIGHTING (Lightweight: Ambient + 1 Point Light, No Shadow) */}
       {/* ============================================================ */}

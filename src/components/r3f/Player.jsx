@@ -3,6 +3,7 @@ import * as THREE from "three";
 import { useGLTF } from "@react-three/drei";
 import { useFrame } from "@react-three/fiber";
 import { VILLAGE_BUILDINGS } from "./villageBuildingsConfig";
+import { DEFAULT_SHOP_3D_ITEMS } from "../../services/inventoryLogic";
 
 const BUILDINGS_CONFIG = [
   { name: "Shop", x: 0, z: -2.5, halfW: 3.8, halfD: 5.5 },
@@ -53,13 +54,17 @@ export function Player({
   currentLocation,
   isDialogOpen,
   hasModalOpen,
+  shopItems = DEFAULT_SHOP_3D_ITEMS,
+  collectedItemIds = [],
   onPromptChange,
   onInteractDoor,
-  onInteractNPC
+  onInteractNPC,
+  onPickupItem
 }) {
   const groupRef = useRef();
   const keysRef = useRef({ w: false, a: false, s: false, d: false });
-  const prevPromptRef = useRef({ door: null, npc: null });
+  const prevPromptRef = useRef({ door: null, npc: null, item: null });
+  const activeItemRef = useRef(null);
   const forwardVecRef = useRef(new THREE.Vector3());
   const rightVecRef = useRef(new THREE.Vector3());
 
@@ -132,17 +137,27 @@ export function Player({
   // Klaviatura
   useEffect(() => {
     const handleKeyDown = (e) => {
+      if (e.isComposing || e.keyCode === 229) return;
+      const targetTag = e.target?.tagName?.toLowerCase();
+      if (targetTag === "input" || targetTag === "textarea" || e.target?.isContentEditable) {
+        return;
+      }
+
       const code = e.code;
       if (code === "KeyF") {
         onInteractNPC();
         return;
       }
+      if (isDialogOpen || hasModalOpen) return;
       if (code === "KeyE") {
+        if (activeItemRef.current && onPickupItem) {
+          onPickupItem(activeItemRef.current);
+          return;
+        }
         onInteractDoor();
         return;
       }
 
-      if (isDialogOpen || hasModalOpen) return;
       if (code === "KeyW") keysRef.current.w = true;
       if (code === "KeyS") keysRef.current.s = true;
       if (code === "KeyA") keysRef.current.a = true;
@@ -172,7 +187,7 @@ export function Player({
       window.removeEventListener("keyup", handleKeyUp);
       window.removeEventListener("blur", handleBlur);
     };
-  }, [isDialogOpen, hasModalOpen, onInteractNPC, onInteractDoor]);
+  }, [isDialogOpen, hasModalOpen, onInteractNPC, onInteractDoor, onPickupItem]);
 
   // Kolliziya
   const checkCollisions = (x, z) => {
@@ -180,174 +195,24 @@ export function Player({
 
     if (currentLocation === "outside") {
       for (const b of BUILDINGS_CONFIG) {
-        // Special exterior collision handling for Language School with doorway opening
-        if (b.name === "Language School") {
-          // Language School: Center [-14.4, 36.0], Bounds X in [-17.0, -11.8], Z in [33.5, 38.5]
-          // Doorway threshold is at X in [-15.2, -13.6] on the South frontage (Z = 33.5).
-          const bLeft = -17.0;
-          const bRight = -11.8;
-          const bBack = 33.5;
-          const bFront = 38.5;
+        // Special exterior collision handling for Education & Community District buildings with South doorway opening
+        if (
+          b.name === "Language School" ||
+          b.name === "Study Center" ||
+          b.name === "Community Center" ||
+          b.name === "Career Center" ||
+          b.name === "Activity Center" ||
+          b.name === "Multi-Purpose Hall"
+        ) {
+          const bLeft = b.x - (b.halfW || 4.5);
+          const bRight = b.x + (b.halfW || 4.5);
+          const bBack = b.z - (b.halfD || 3.5);
+          const bFront = b.z + (b.halfD || 3.5);
 
           if (x > bLeft - r && x < bRight + r && z > bBack - r && z < bFront + r) {
-            const isDoorway = x >= -15.1 && x <= -13.7;
+            const isDoorway = Math.abs(x - b.x) <= 0.85;
             if (isDoorway) {
-              // In the doorway opening, block penetration past front door face (Z = 33.4)
-              if (z > bBack - 0.1) {
-                z = bBack - 0.1;
-              }
-            } else {
-              const overlapLeft = x - (bLeft - r);
-              const overlapRight = bRight + r - x;
-              const overlapBack = z - (bBack - r);
-              const overlapFront = bFront + r - z;
-
-              const minOverlap = Math.min(overlapLeft, overlapRight, overlapBack, overlapFront);
-              if (minOverlap === overlapFront) z = bFront + r;
-              else if (minOverlap === overlapBack) z = bBack - r;
-              else if (minOverlap === overlapLeft) x = bLeft - r;
-              else if (minOverlap === overlapRight) x = bRight + r;
-            }
-          }
-          continue;
-        }
-
-        // Special exterior collision handling for Study Center with doorway opening
-        if (b.name === "Study Center") {
-          // Study Center: Center [-7.5, 36.0], Bounds X in [-10.1, -4.9], Z in [33.7, 38.3]
-          // Doorway threshold is at X in [-8.2, -6.8] on the South frontage (Z = 33.7).
-          const bLeft = -10.1;
-          const bRight = -4.9;
-          const bBack = 33.7;
-          const bFront = 38.3;
-
-          if (x > bLeft - r && x < bRight + r && z > bBack - r && z < bFront + r) {
-            const isDoorway = x >= -8.2 && x <= -6.8;
-            if (isDoorway) {
-              if (z > bBack - 0.1) {
-                z = bBack - 0.1;
-              }
-            } else {
-              const overlapLeft = x - (bLeft - r);
-              const overlapRight = bRight + r - x;
-              const overlapBack = z - (bBack - r);
-              const overlapFront = bFront + r - z;
-
-              const minOverlap = Math.min(overlapLeft, overlapRight, overlapBack, overlapFront);
-              if (minOverlap === overlapFront) z = bFront + r;
-              else if (minOverlap === overlapBack) z = bBack - r;
-              else if (minOverlap === overlapLeft) x = bLeft - r;
-              else if (minOverlap === overlapRight) x = bRight + r;
-            }
-          }
-          continue;
-        }
-
-        // Special exterior collision handling for Community Center with doorway opening
-        if (b.name === "Community Center") {
-          // Community Center: Center [7.2, 36.0], Bounds X in [4.7, 9.7], Z in [34.0, 38.0]
-          // Doorway threshold is at X in [6.5, 7.9] on the South frontage (Z = 34.0).
-          const bLeft = 4.7;
-          const bRight = 9.7;
-          const bBack = 34.0;
-          const bFront = 38.0;
-
-          if (x > bLeft - r && x < bRight + r && z > bBack - r && z < bFront + r) {
-            const isDoorway = x >= 6.5 && x <= 7.9;
-            if (isDoorway) {
-              if (z > bBack - 0.1) {
-                z = bBack - 0.1;
-              }
-            } else {
-              const overlapLeft = x - (bLeft - r);
-              const overlapRight = bRight + r - x;
-              const overlapBack = z - (bBack - r);
-              const overlapFront = bFront + r - z;
-
-              const minOverlap = Math.min(overlapLeft, overlapRight, overlapBack, overlapFront);
-              if (minOverlap === overlapFront) z = bFront + r;
-              else if (minOverlap === overlapBack) z = bBack - r;
-              else if (minOverlap === overlapLeft) x = bLeft - r;
-              else if (minOverlap === overlapRight) x = bRight + r;
-            }
-          }
-          continue;
-        }
-
-        // Special exterior collision handling for Career Center with doorway opening
-        if (b.name === "Career Center") {
-          // Career Center: Center [14.4, 36.0], Bounds X in [11.9, 16.9], Z in [33.8, 38.2]
-          // Doorway threshold is at X in [13.7, 15.1] on the South frontage (Z = 33.8).
-          const bLeft = 11.9;
-          const bRight = 16.9;
-          const bBack = 33.8;
-          const bFront = 38.2;
-
-          if (x > bLeft - r && x < bRight + r && z > bBack - r && z < bFront + r) {
-            const isDoorway = x >= 13.7 && x <= 15.1;
-            if (isDoorway) {
-              if (z > bBack - 0.1) {
-                z = bBack - 0.1;
-              }
-            } else {
-              const overlapLeft = x - (bLeft - r);
-              const overlapRight = bRight + r - x;
-              const overlapBack = z - (bBack - r);
-              const overlapFront = bFront + r - z;
-
-              const minOverlap = Math.min(overlapLeft, overlapRight, overlapBack, overlapFront);
-              if (minOverlap === overlapFront) z = bFront + r;
-              else if (minOverlap === overlapBack) z = bBack - r;
-              else if (minOverlap === overlapLeft) x = bLeft - r;
-              else if (minOverlap === overlapRight) x = bRight + r;
-            }
-          }
-          continue;
-        }
-
-        // Special exterior collision handling for Activity Center with doorway opening
-        if (b.name === "Activity Center") {
-          // Activity Center: Center [-10.8, 41.8], Bounds X in [-13.4, -8.2], Z in [39.9, 43.7]
-          // Doorway threshold is at X in [-11.5, -10.1] on the South frontage (Z = 39.9).
-          const bLeft = -13.4;
-          const bRight = -8.2;
-          const bBack = 39.9;
-          const bFront = 43.7;
-
-          if (x > bLeft - r && x < bRight + r && z > bBack - r && z < bFront + r) {
-            const isDoorway = x >= -11.5 && x <= -10.1;
-            if (isDoorway) {
-              if (z > bBack - 0.1) {
-                z = bBack - 0.1;
-              }
-            } else {
-              const overlapLeft = x - (bLeft - r);
-              const overlapRight = bRight + r - x;
-              const overlapBack = z - (bBack - r);
-              const overlapFront = bFront + r - z;
-
-              const minOverlap = Math.min(overlapLeft, overlapRight, overlapBack, overlapFront);
-              if (minOverlap === overlapFront) z = bFront + r;
-              else if (minOverlap === overlapBack) z = bBack - r;
-              else if (minOverlap === overlapLeft) x = bLeft - r;
-              else if (minOverlap === overlapRight) x = bRight + r;
-            }
-          }
-          continue;
-        }
-
-        // Special exterior collision handling for Multi-Purpose Hall with doorway opening
-        if (b.name === "Multi-Purpose Hall") {
-          // Multi-Purpose Hall: Center [10.8, 41.8], Bounds X in [8.7, 12.9], Z in [39.6, 44.0]
-          // Doorway threshold is at X in [10.1, 11.5] on the South frontage (Z = 39.6).
-          const bLeft = 8.7;
-          const bRight = 12.9;
-          const bBack = 39.6;
-          const bFront = 44.0;
-
-          if (x > bLeft - r && x < bRight + r && z > bBack - r && z < bFront + r) {
-            const isDoorway = x >= 10.1 && x <= 11.5;
-            if (isDoorway) {
+              // In the doorway opening, block penetration past front door face
               if (z > bBack - 0.1) {
                 z = bBack - 0.1;
               }
@@ -427,129 +292,129 @@ export function Player({
       x = Math.max(2.2, Math.min(7.8, x));
       z = Math.max(17.0, Math.min(20.2, z));
     } else if (currentLocation === "LanguageSchool") {
-      // Room perimeter bounds: X in [-16.5, -12.3], Z in [34.4, 37.6]
-      x = Math.max(-16.5, Math.min(-12.3, x));
-      z = Math.max(34.4, Math.min(37.6, z));
+      // Room perimeter bounds: X in [-24.1, -19.9], Z in [36.4, 39.6]
+      x = Math.max(-24.1, Math.min(-19.9, x));
+      z = Math.max(36.4, Math.min(39.6, z));
 
-      // Block Teacher Desk area: X in [-15.4, -13.4], Z in [34.4, 35.95]
-      if (x > -15.4 && x < -13.4 && z < 35.95) {
-        z = 35.95;
+      // Block Teacher Desk area: X in [-23.0, -21.0], Z in [36.4, 37.95]
+      if (x > -23.0 && x < -21.0 && z < 37.95) {
+        z = 37.95;
       }
 
-      // Block Left Student Desks: X in [-16.5, -15.0], Z in [36.1, 37.6]
-      if (x > -16.5 && x < -15.0 && z > 36.1 && z < 37.6) {
-        x = -15.0;
+      // Block Left Student Desks: X in [-24.1, -22.6], Z in [38.1, 39.6]
+      if (x > -24.1 && x < -22.6 && z > 38.1 && z < 39.6) {
+        x = -22.6;
       }
 
-      // Block Right Student Desks: X in [-13.8, -12.3], Z in [36.1, 37.6]
-      if (x > -13.8 && x < -12.3 && z > 36.1 && z < 37.6) {
-        x = -13.8;
+      // Block Right Student Desks: X in [-21.4, -19.9], Z in [38.1, 39.6]
+      if (x > -21.4 && x < -19.9 && z > 38.1 && z < 39.6) {
+        x = -21.4;
       }
     } else if (currentLocation === "StudyCenter") {
-      // Room perimeter bounds: X in [-9.6, -5.4], Z in [34.4, 37.6]
-      x = Math.max(-9.6, Math.min(-5.4, x));
-      z = Math.max(34.4, Math.min(37.6, z));
+      // Room perimeter bounds: X in [-11.6, -7.4], Z in [36.4, 39.6]
+      x = Math.max(-11.6, Math.min(-7.4, x));
+      z = Math.max(36.4, Math.min(39.6, z));
 
-      // Block Tutor Desk area: X in [-8.5, -6.5], Z in [34.4, 35.95]
-      if (x > -8.5 && x < -6.5 && z < 35.95) {
-        z = 35.95;
+      // Block Tutor Desk area: X in [-10.5, -8.5], Z in [36.4, 37.95]
+      if (x > -10.5 && x < -8.5 && z < 37.95) {
+        z = 37.95;
       }
 
-      // Block Left Study Carrels: X in [-9.6, -8.1], Z in [36.0, 37.6]
-      if (x > -9.6 && x < -8.1 && z > 36.0 && z < 37.6) {
-        x = -8.1;
+      // Block Left Study Carrels: X in [-11.6, -10.1], Z in [38.0, 39.6]
+      if (x > -11.6 && x < -10.1 && z > 38.0 && z < 39.6) {
+        x = -10.1;
       }
 
-      // Block Right Collaborative Table & Printer: X in [-6.9, -5.4], Z in [34.8, 37.2]
-      if (x > -6.9 && x < -5.4 && z > 34.8 && z < 37.2) {
-        x = -6.9;
+      // Block Right Collaborative Table & Printer: X in [-8.9, -7.4], Z in [36.8, 39.2]
+      if (x > -8.9 && x < -7.4 && z > 36.8 && z < 39.2) {
+        x = -8.9;
       }
     } else if (currentLocation === "CommunityCenter") {
-      // Room perimeter bounds: X in [5.1, 9.3], Z in [34.6, 37.5]
-      x = Math.max(5.1, Math.min(9.3, x));
-      z = Math.max(34.6, Math.min(37.5, z));
+      // Room perimeter bounds: X in [7.4, 11.6], Z in [36.6, 39.5]
+      x = Math.max(7.4, Math.min(11.6, x));
+      z = Math.max(36.6, Math.min(39.5, z));
 
-      // Block Reception Service Counter & Staff area: X in [5.8, 8.6], Z in [34.6, 36.25]
-      if (x > 5.8 && x < 8.6 && z < 36.25) {
-        z = 36.25;
+      // Block Reception Service Counter & Staff area: X in [8.1, 10.9], Z in [36.6, 38.25]
+      if (x > 8.1 && x < 10.9 && z < 38.25) {
+        z = 38.25;
       }
 
-      // Block West Application Counter & Filling Table: X in [5.1, 5.8], Z in [35.0, 37.4]
-      if (x < 5.8 && z > 35.0 && z < 37.4) {
-        x = 5.8;
+      // Block West Application Counter & Filling Table: X in [7.4, 8.1], Z in [37.0, 39.4]
+      if (x < 8.1 && z > 37.0 && z < 39.4) {
+        x = 8.1;
       }
 
-      // Block East Waiting Chairs & Brochure Stand: X in [8.6, 9.3], Z in [34.9, 37.4]
-      if (x > 8.6 && z > 34.9 && z < 37.4) {
-        x = 8.6;
+      // Block East Waiting Chairs & Brochure Stand: X in [10.9, 11.6], Z in [36.9, 39.4]
+      if (x > 10.9 && z > 36.9 && z < 39.4) {
+        x = 10.9;
       }
     } else if (currentLocation === "CareerCenter") {
-      // Room perimeter bounds: X in [12.3, 16.5], Z in [34.5, 37.5]
-      x = Math.max(12.3, Math.min(16.5, x));
-      z = Math.max(34.5, Math.min(37.5, z));
+      // Room perimeter bounds: X in [19.9, 24.1], Z in [36.5, 39.5]
+      x = Math.max(19.9, Math.min(24.1, x));
+      z = Math.max(36.5, Math.min(39.5, z));
 
-      // Block Counselor Desk & James area: X in [13.4, 15.4], Z in [34.5, 36.15]
-      if (x > 13.4 && x < 15.4 && z < 36.15) {
-        z = 36.15;
+      // Block Counselor Desk & James area: X in [21.0, 23.0], Z in [36.5, 38.15]
+      if (x > 21.0 && x < 23.0 && z < 38.15) {
+        z = 38.15;
       }
 
-      // Block West Consultation Table & Bookshelf: X in [12.3, 13.3], Z in [34.8, 37.3]
-      if (x < 13.3 && z > 34.8 && z < 37.3) {
-        x = 13.3;
+      // Block West Consultation Table & Bookshelf: X in [19.9, 20.9], Z in [36.8, 39.3]
+      if (x < 20.9 && z > 36.8 && z < 39.3) {
+        x = 20.9;
       }
 
-      // Block East Waiting Area & Filing Cabinet: X in [15.5, 16.5], Z in [34.8, 37.4]
-      if (x > 15.5 && z > 34.8 && z < 37.4) {
-        x = 15.5;
+      // Block East Waiting Area & Filing Cabinet: X in [23.1, 24.1], Z in [36.8, 39.4]
+      if (x > 23.1 && z > 36.8 && z < 39.4) {
+        x = 23.1;
       }
     } else if (currentLocation === "ActivityCenter") {
-      // Room perimeter bounds: X in [-13.0, -8.6], Z in [40.4, 43.3]
-      x = Math.max(-13.0, Math.min(-8.6, x));
-      z = Math.max(40.4, Math.min(43.3, z));
+      // Room perimeter bounds: X in [-18.2, -13.8], Z in [47.1, 50.0]
+      x = Math.max(-18.2, Math.min(-13.8, x));
+      z = Math.max(47.1, Math.min(50.0, z));
 
-      // Block Coordinator Desk & Hana area: X in [-11.7, -9.9], Z in [40.4, 41.85]
-      if (x > -11.7 && x < -9.9 && z < 41.85) {
-        z = 41.85;
+      // Block Coordinator Desk & Hana area: X in [-16.9, -15.1], Z in [47.1, 48.55]
+      if (x > -16.9 && x < -15.1 && z < 48.55) {
+        z = 48.55;
       }
 
-      // Block West Craft Table & Storage Shelves: X in [-13.0, -11.6], Z in [40.5, 43.2]
-      if (x < -11.6 && z > 40.5 && z < 43.2) {
-        x = -11.6;
+      // Block West Craft Table & Storage Shelves: X in [-18.2, -16.8], Z in [47.2, 49.9]
+      if (x < -16.8 && z > 47.2 && z < 49.9) {
+        x = -16.8;
       }
 
-      // Block East Language Club Table, Bookshelf & Dispenser: X in [-10.0, -8.6], Z in [40.5, 43.2]
-      if (x > -10.0 && z > 40.5 && z < 43.2) {
-        x = -10.0;
+      // Block East Language Club Table, Bookshelf & Dispenser: X in [-15.2, -13.8], Z in [47.2, 49.9]
+      if (x > -15.2 && z > 47.2 && z < 49.9) {
+        x = -15.2;
       }
     } else if (currentLocation === "MultiPurposeHall") {
-      // Room perimeter bounds: X in [9.0, 12.6], Z in [40.1, 43.5]
-      x = Math.max(9.0, Math.min(12.6, x));
-      z = Math.max(40.1, Math.min(43.5, z));
+      // Room perimeter bounds: X in [14.2, 17.8], Z in [46.8, 50.2]
+      x = Math.max(14.2, Math.min(17.8, x));
+      z = Math.max(46.8, Math.min(50.2, z));
 
-      // Block Stage & Podium Area at rear: Z < 40.75
-      if (z < 40.75) {
-        z = 40.75;
+      // Block Stage & Podium Area at rear: Z < 47.45
+      if (z < 47.45) {
+        z = 47.45;
       }
 
-      // Block West Audience Chairs & Storage: X in [9.0, 10.2], Z in [40.8, 42.4]
-      if (x < 10.2 && z > 40.8 && z < 42.4) {
-        x = 10.2;
+      // Block West Audience Chairs & Storage: X in [14.2, 15.4], Z in [47.5, 49.1]
+      if (x < 15.4 && z > 47.5 && z < 49.1) {
+        x = 15.4;
       }
 
-      // Block East Audience Chairs & Registration Desk: X in [11.4, 12.6], Z in [40.8, 42.4]
-      if (x > 11.4 && z > 40.8 && z < 42.4) {
-        x = 11.4;
+      // Block East Audience Chairs & Registration Desk: X in [16.6, 17.8], Z in [47.5, 49.1]
+      if (x > 16.6 && z > 47.5 && z < 49.1) {
+        x = 16.6;
       }
 
-      // Block Coordinator Yuri's standing post: X in [10.5, 11.1], Z in [41.8, 42.1]
-      if (x > 10.5 && x < 11.1 && z > 41.8 && z < 42.1) {
-        z = 42.1;
+      // Block Coordinator Yuri's standing post: X in [15.7, 16.3], Z in [48.5, 48.8]
+      if (x > 15.7 && x < 16.3 && z > 48.5 && z < 48.8) {
+        z = 48.8;
       }
     }
 
     if (currentLocation === "outside") {
-      x = Math.max(-28, Math.min(28, x));
-      z = Math.max(-20, Math.min(46.0, z));
+      x = Math.max(-30, Math.min(30, x));
+      z = Math.max(-20, Math.min(54.0, z));
     }
     return { x, z };
   };
@@ -660,6 +525,7 @@ export function Player({
 
     let door = null;
     let npc = null;
+    let item = null;
 
     if (currentLocation === "outside") {
       const shopDist = Math.hypot(posX - 0, posZ - 3.4);
@@ -669,12 +535,12 @@ export function Player({
       const bankDist = Math.hypot(posX - -23.0, posZ - 3.0);
       const libraryDist = Math.hypot(posX - 19.8, posZ - 3.0);
       const policeDist = Math.hypot(posX - 5.0, posZ - 13.5);
-      const langDist = Math.hypot(posX - -14.4, posZ - 33.0);
-      const studyDist = Math.hypot(posX - -7.5, posZ - 33.2);
-      const commDist = Math.hypot(posX - 7.2, posZ - 33.4);
-      const careerDist = Math.hypot(posX - 14.4, posZ - 33.4);
-      const actDist = Math.hypot(posX - -10.8, posZ - 39.4);
-      const hallDist = Math.hypot(posX - 10.8, posZ - 39.4);
+      const langDist = Math.hypot(posX - -22.0, posZ - 34.0);
+      const studyDist = Math.hypot(posX - -9.5, posZ - 34.2);
+      const commDist = Math.hypot(posX - 9.5, posZ - 34.2);
+      const careerDist = Math.hypot(posX - 22.0, posZ - 34.0);
+      const actDist = Math.hypot(posX - -16.0, posZ - 44.8);
+      const hallDist = Math.hypot(posX - 16.0, posZ - 44.5);
       if (shopDist < 1.4) door = "Shop Door";
       else if (cafeDist < 1.4) door = "Cafe Door";
       else if (hotelDist < 1.6) door = "Hotel Door";
@@ -682,15 +548,34 @@ export function Player({
       else if (bankDist < 1.6) door = "Bank Door";
       else if (libraryDist < 1.6) door = "Library Door";
       else if (policeDist < 1.6) door = "Police Station Door";
-      else if (langDist < 1.6) door = "Language School Door";
-      else if (studyDist < 1.6) door = "Study Center Door";
-      else if (commDist < 1.6) door = "Community Center Door";
-      else if (careerDist < 1.6) door = "Career Center Door";
-      else if (actDist < 1.6) door = "Activity Center Door";
-      else if (hallDist < 1.6) door = "Multi-Purpose Hall Door";
+      else if (langDist < 1.8) door = "Language School Door";
+      else if (studyDist < 1.8) door = "Study Center Door";
+      else if (commDist < 1.8) door = "Community Center Door";
+      else if (careerDist < 1.8) door = "Career Center Door";
+      else if (actDist < 1.8) door = "Activity Center Door";
+      else if (hallDist < 1.8) door = "Multi-Purpose Hall Door";
     } else if (currentLocation === "Shop") {
       if (Math.hypot(posX - 0, posZ - 2.5) < 1.4) door = "Exit Shop";
       if (Math.hypot(posX - 0, posZ - -1.85) < 2.5) npc = "Shop Seller";
+
+      // Detect closest uncollected 3D item within pickup radius (1.35m)
+      const collectedSet = new Set(collectedItemIds);
+      let closestItem = null;
+      let minItemDist = 1.35;
+
+      if (Array.isArray(shopItems)) {
+        for (const it of shopItems) {
+          if (collectedSet.has(it.instanceId)) continue;
+          const [ix, , iz] = it.position;
+          const dist = Math.hypot(posX - ix, posZ - iz);
+          if (dist < minItemDist) {
+            minItemDist = dist;
+            closestItem = it;
+          }
+        }
+      }
+
+      item = closestItem;
     } else if (currentLocation === "Cafe") {
       if (Math.hypot(posX - -12, posZ - 2.5) < 1.4) door = "Exit Cafe";
       if (Math.hypot(posX - -13.2, posZ - -1.75) < 2.5) npc = "Cafe Barista";
@@ -710,28 +595,34 @@ export function Player({
       if (Math.hypot(posX - 5.0, posZ - 20.0) < 1.4 || posZ > 19.3) door = "Exit Police Station";
       if (Math.hypot(posX - 5.0, posZ - 16.2) < 2.5) npc = "Officer Alex";
     } else if (currentLocation === "LanguageSchool") {
-      if (Math.hypot(posX - -14.4, posZ - 37.8) < 1.4 || posZ > 37.1) door = "Exit Language School";
-      if (Math.hypot(posX - -14.4, posZ - 35.0) < 2.0) npc = "Teacher Olivia";
+      if (Math.hypot(posX - -22.0, posZ - 39.8) < 1.4 || posZ > 39.1) door = "Exit Language School";
+      if (Math.hypot(posX - -22.0, posZ - 37.0) < 2.0) npc = "Teacher Olivia";
     } else if (currentLocation === "StudyCenter") {
-      if (Math.hypot(posX - -7.5, posZ - 37.8) < 1.4 || posZ > 37.1) door = "Exit Study Center";
-      if (Math.hypot(posX - -7.5, posZ - 35.2) < 2.0) npc = "Tutor Daniel";
+      if (Math.hypot(posX - -9.5, posZ - 39.8) < 1.4 || posZ > 39.1) door = "Exit Study Center";
+      if (Math.hypot(posX - -9.5, posZ - 37.2) < 2.0) npc = "Tutor Daniel";
     } else if (currentLocation === "CommunityCenter") {
-      if (Math.hypot(posX - 7.2, posZ - 37.8) < 1.4 || posZ > 37.1) door = "Exit Community Center";
-      if (Math.hypot(posX - 7.2, posZ - 35.2) < 2.0) npc = "Staff Mina";
+      if (Math.hypot(posX - 9.5, posZ - 39.8) < 1.4 || posZ > 39.1) door = "Exit Community Center";
+      if (Math.hypot(posX - 9.5, posZ - 37.2) < 2.0) npc = "Staff Mina";
     } else if (currentLocation === "CareerCenter") {
-      if (Math.hypot(posX - 14.4, posZ - 37.8) < 1.4 || posZ > 37.1) door = "Exit Career Center";
-      if (Math.hypot(posX - 14.4, posZ - 35.2) < 2.0) npc = "Career Counselor James";
+      if (Math.hypot(posX - 22.0, posZ - 39.8) < 1.4 || posZ > 39.1) door = "Exit Career Center";
+      if (Math.hypot(posX - 22.0, posZ - 37.2) < 2.0) npc = "Career Counselor James";
     } else if (currentLocation === "ActivityCenter") {
-      if (Math.hypot(posX - -10.8, posZ - 43.4) < 1.4 || posZ > 42.7) door = "Exit Activity Center";
-      if (Math.hypot(posX - -10.8, posZ - 41.0) < 2.0) npc = "Coordinator Hana";
+      if (Math.hypot(posX - -16.0, posZ - 50.1) < 1.4 || posZ > 49.4) door = "Exit Activity Center";
+      if (Math.hypot(posX - -16.0, posZ - 47.7) < 2.0) npc = "Coordinator Hana";
     } else if (currentLocation === "MultiPurposeHall") {
-      if (Math.hypot(posX - 10.8, posZ - 43.4) < 1.4 || posZ > 42.7) door = "Exit Multi-Purpose Hall";
-      if (Math.hypot(posX - 10.8, posZ - 42.0) < 2.0) npc = "Coordinator Yuri";
+      if (Math.hypot(posX - 16.0, posZ - 50.1) < 1.4 || posZ > 49.4) door = "Exit Multi-Purpose Hall";
+      if (Math.hypot(posX - 16.0, posZ - 48.7) < 2.0) npc = "Coordinator Yuri";
     }
 
-    if (prevPromptRef.current.door !== door || prevPromptRef.current.npc !== npc) {
-      prevPromptRef.current = { door, npc };
-      onPromptChange({ door, npc });
+    activeItemRef.current = item;
+
+    if (
+      prevPromptRef.current.door !== door ||
+      prevPromptRef.current.npc !== npc ||
+      prevPromptRef.current.item?.instanceId !== item?.instanceId
+    ) {
+      prevPromptRef.current = { door, npc, item };
+      onPromptChange({ door, npc, item });
     }
   });
 

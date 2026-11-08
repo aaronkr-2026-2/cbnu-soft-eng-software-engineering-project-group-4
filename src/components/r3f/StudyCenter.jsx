@@ -502,7 +502,7 @@ export function StudyCenter({ isTalking = false, currentLocation = "outside" }) 
   if (!isInside) return null;
 
   return (
-    <group>
+    <group position={[-2.0, 0, 2.0]}>
       {/* ============================================================ */}
       {/* 1. STUDY LIGHTING (Max 2 Lightweight Lights, No Shadows)      */}
       {/* ============================================================ */}
