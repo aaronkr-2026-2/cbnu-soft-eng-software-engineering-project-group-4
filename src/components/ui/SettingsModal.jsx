@@ -87,10 +87,9 @@ function SettingsModalDialog({
       onClick={onClose}
       style={{
         position: "fixed",
-        top: 0,
-        left: 0,
-        width: "100vw",
-        height: "100vh",
+        inset: 0,
+        width: "100%",
+        height: "100dvh",
         background: "rgba(0, 0, 0, 0.72)",
         backdropFilter: "blur(6px)",
         WebkitBackdropFilter: "blur(6px)",
@@ -98,10 +97,11 @@ function SettingsModalDialog({
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
-        padding: "20px"
+        padding: "clamp(12px, 3vw, 20px)"
       }}
     >
       <div
+        className="modal-scrollable"
         onClick={(e) => e.stopPropagation()}
         style={{
           background: "linear-gradient(145deg, #181824 0%, #101018 100%)",
@@ -109,9 +109,9 @@ function SettingsModalDialog({
           borderRadius: "20px",
           width: "100%",
           maxWidth: "480px",
-          maxHeight: "90vh",
+          maxHeight: "min(680px, calc(100dvh - 32px))",
           overflowY: "auto",
-          padding: "28px 30px",
+          padding: "clamp(20px, 4vw, 28px) clamp(16px, 4vw, 30px)",
           boxShadow: "0 25px 60px rgba(0, 0, 0, 0.8), 0 0 1px rgba(255, 255, 255, 0.3)",
           color: "#f8fafc",
           fontFamily: "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif"
@@ -130,10 +130,12 @@ function SettingsModalDialog({
               background: "rgba(255, 255, 255, 0.08)",
               border: "none",
               color: "#94a3b8",
-              width: "32px",
-              height: "32px",
+              width: "44px",
+              height: "44px",
+              minWidth: "44px",
+              minHeight: "44px",
               borderRadius: "50%",
-              fontSize: "18px",
+              fontSize: "22px",
               cursor: "pointer",
               display: "flex",
               alignItems: "center",

@@ -171,17 +171,17 @@ export function AuthScreen({ user, onAuthSuccess, onSignOut, initialInterfaceLan
     <div
       style={{
         position: "fixed",
-        top: 0,
-        left: 0,
-        width: "100vw",
-        height: "100vh",
+        inset: 0,
+        width: "100%",
+        height: "100dvh",
         zIndex: 100,
         background: "radial-gradient(ellipse at 50% 25%, #1e293b 0%, #0f172a 65%, #020617 100%)",
         display: "flex",
         flexDirection: "column",
         justifyContent: "center",
         alignItems: "center",
-        padding: "20px",
+        padding: "clamp(12px, 3vw, 20px)",
+        overflowY: "auto",
         fontFamily: "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
         color: "#fff"
       }}
@@ -202,16 +202,19 @@ export function AuthScreen({ user, onAuthSuccess, onSignOut, initialInterfaceLan
 
       {/* Main Glassmorphic Card */}
       <div
+        className="modal-scrollable"
         style={{
           position: "relative",
           width: "100%",
           maxWidth: "440px",
+          maxHeight: "min(720px, calc(100dvh - 24px))",
+          overflowY: "auto",
           background: "rgba(30, 30, 36, 0.90)",
           backdropFilter: "blur(16px)",
           WebkitBackdropFilter: "blur(16px)",
           border: "1px solid rgba(255, 255, 255, 0.12)",
           borderRadius: "20px",
-          padding: "30px 34px",
+          padding: "clamp(20px, 4vw, 30px) clamp(16px, 4vw, 34px)",
           boxShadow: "0 20px 50px rgba(0, 0, 0, 0.7), 0 0 1px rgba(255, 255, 255, 0.2)",
           zIndex: 1
         }}

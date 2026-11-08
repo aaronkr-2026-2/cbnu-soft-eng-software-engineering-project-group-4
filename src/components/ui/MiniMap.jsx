@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useMemo } from "react";
+import React, { useEffect, useRef, useState, useMemo } from "react";
 import { VILLAGE_BUILDINGS } from "../r3f/villageBuildingsConfig";
 import { t } from "../../services/i18n";
 
@@ -8,15 +8,22 @@ const WORLD_MAX_X = 28.0;
 const WORLD_MIN_Z = -7.0;
 const WORLD_MAX_Z = 52.0;
 
-export function MiniMap({ playerRef, currentLocation = "outside", interfaceLanguage = "en" }) {
+export function MiniMap({
+  playerRef,
+  currentLocation = "outside",
+  interfaceLanguage = "en",
+  compact = false
+}) {
   const markerRef = useRef(null);
   const pointerRef = useRef(null);
+  const [showAllLabels, setShowAllLabels] = useState(false);
+  const [hoveredId, setHoveredId] = useState(null);
 
   // Derive building markers directly from official config + Shop/Cafe
   const buildings = useMemo(() => {
     const list = [
-      { id: "shop", name: "SHOP", x: 0.0, z: -2.5, color: "#22c55e", labelPos: "top" },
-      { id: "cafe", name: "CAFE", x: -12.0, z: 0.0, color: "#f97316", labelPos: "top" }
+      { id: "shop", name: "SHOP", x: 0.0, z: -2.5, color: "#22c55e", labelPos: "bottom" },
+      { id: "cafe", name: "CAFE", x: -12.0, z: 0.0, color: "#f97316", labelPos: "bottom" }
     ];
 
     VILLAGE_BUILDINGS.forEach((b) => {
@@ -28,19 +35,19 @@ export function MiniMap({ playerRef, currentLocation = "outside", interfaceLangu
       if (b.id === "building-type-a") {
         name = "HOTEL";
         color = "#a855f7";
-        labelPos = "top";
+        labelPos = "bottom";
       } else if (b.id === "building-type-b") {
-        name = "HOSPITAL";
+        name = "HOSP";
         color = "#00897b";
         labelPos = "top";
       } else if (b.id === "building-type-c") {
-        name = "LIBRARY";
+        name = "LIB";
         color = "#ec4899";
-        labelPos = "top";
+        labelPos = "bottom";
       } else if (b.id === "building-type-d") {
         name = "BANK";
         color = "#eab308";
-        labelPos = "top";
+        labelPos = "bottom";
       } else if (b.id === "building-type-e") {
         name = "POLICE";
         color = "#3b82f6";
@@ -49,19 +56,19 @@ export function MiniMap({ playerRef, currentLocation = "outside", interfaceLangu
 
       // Education & Community District building markers
       const districtLabels = {
-        "language-school": { name: "LANG", color: "#38bdf8" },
-        "study-center": { name: "STUDY", color: "#a78bfa" },
-        "community-center": { name: "COMM", color: "#34d399" },
-        "career-center": { name: "CAREER", color: "#fbbf24" },
-        "activity-center": { name: "ACT", color: "#fb7185" },
-        "multi-purpose-hall": { name: "HALL", color: "#818cf8" }
+        "language-school": { name: "LANG", color: "#38bdf8", labelPos: "bottom" },
+        "study-center": { name: "STUDY", color: "#a78bfa", labelPos: "top" },
+        "community-center": { name: "COMM", color: "#34d399", labelPos: "bottom" },
+        "career-center": { name: "CAREER", color: "#fbbf24", labelPos: "top" },
+        "activity-center": { name: "ACT", color: "#fb7185", labelPos: "top" },
+        "multi-purpose-hall": { name: "HALL", color: "#818cf8", labelPos: "top" }
       };
 
       if (districtLabels[b.id]) {
         isHouse = true;
         name = districtLabels[b.id].name;
         color = districtLabels[b.id].color;
-        labelPos = "top";
+        labelPos = districtLabels[b.id].labelPos;
       }
 
       list.push({
@@ -120,12 +127,8 @@ export function MiniMap({ playerRef, currentLocation = "outside", interfaceLangu
 
   return (
     <div
+      className="minimap-container hud-container"
       style={{
-        position: "absolute",
-        top: "16px",
-        right: "16px",
-        width: "220px",
-        height: "185px",
         background: "rgba(15, 23, 42, 0.88)",
         backdropFilter: "blur(8px)",
         WebkitBackdropFilter: "blur(8px)",
@@ -171,36 +174,61 @@ export function MiniMap({ playerRef, currentLocation = "outside", interfaceLangu
         >
           🗺️ {t("hud.villageMap", {}, interfaceLanguage)}
         </span>
-        <span
-          style={{
-            fontSize: "9px",
-            fontWeight: 700,
-            padding: "1px 6px",
-            borderRadius: "4px",
-            background: isIndoor ? "rgba(59, 130, 246, 0.3)" : "rgba(255, 255, 255, 0.1)",
-            color: isIndoor ? "#60a5fa" : "#94a3b8",
-            border: isIndoor ? "1px solid rgba(59, 130, 246, 0.4)" : "none",
-            letterSpacing: "0.4px"
-          }}
-        >
-          {isIndoor
-            ? currentLocation === "LanguageSchool"
-              ? "LANGUAGE SCHOOL"
-              : currentLocation === "StudyCenter"
-                ? "STUDY CENTER"
-                : currentLocation === "CommunityCenter"
-                  ? "COMMUNITY CENTER"
-                  : currentLocation === "CareerCenter"
-                    ? "CAREER CENTER"
-                    : currentLocation === "ActivityCenter"
-                      ? "ACTIVITY CENTER"
-                      : currentLocation === "MultiPurposeHall"
-                        ? "MULTI-PURPOSE HALL"
-                        : currentLocation === "PoliceStation"
-                        ? "POLICE STATION"
-                        : currentLocation.toUpperCase()
-            : t("hud.outdoors", {}, interfaceLanguage)}
-        </span>
+        <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+          {compact && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                setShowAllLabels((prev) => !prev);
+              }}
+              style={{
+                background: showAllLabels ? "rgba(59, 130, 246, 0.4)" : "rgba(255, 255, 255, 0.12)",
+                border: "none",
+                borderRadius: "3px",
+                color: "#e2e8f0",
+                fontSize: "8px",
+                fontWeight: 700,
+                padding: "2px 5px",
+                cursor: "pointer",
+                pointerEvents: "auto"
+              }}
+              title={showAllLabels ? "Hide Labels" : "Show All Labels"}
+            >
+              {showAllLabels ? "🏷️ ON" : "🏷️ OFF"}
+            </button>
+          )}
+          <span
+            style={{
+              fontSize: "9px",
+              fontWeight: 700,
+              padding: "1px 6px",
+              borderRadius: "4px",
+              background: isIndoor ? "rgba(59, 130, 246, 0.3)" : "rgba(255, 255, 255, 0.1)",
+              color: isIndoor ? "#60a5fa" : "#94a3b8",
+              border: isIndoor ? "1px solid rgba(59, 130, 246, 0.4)" : "none",
+              letterSpacing: "0.4px"
+            }}
+          >
+            {isIndoor
+              ? currentLocation === "LanguageSchool"
+                ? "LANGUAGE SCHOOL"
+                : currentLocation === "StudyCenter"
+                  ? "STUDY CENTER"
+                  : currentLocation === "CommunityCenter"
+                    ? "COMMUNITY CENTER"
+                    : currentLocation === "CareerCenter"
+                      ? "CAREER CENTER"
+                      : currentLocation === "ActivityCenter"
+                        ? "ACTIVITY CENTER"
+                        : currentLocation === "MultiPurposeHall"
+                          ? "MULTI-PURPOSE HALL"
+                          : currentLocation === "PoliceStation"
+                          ? "POLICE STATION"
+                          : currentLocation.toUpperCase()
+              : t("hud.outdoors", {}, interfaceLanguage)}
+          </span>
+        </div>
       </div>
 
       {/* Map Graphics Canvas (CSS Vector Area) */}
@@ -504,23 +532,33 @@ export function MiniMap({ playerRef, currentLocation = "outside", interfaceLangu
               }}
             >
               {/* Building Label */}
-              <span
-                style={{
-                  position: "absolute",
-                  top: "-11px",
-                  whiteSpace: "nowrap",
-                  fontSize: "8px",
-                  fontWeight: 700,
-                  color: isCurrentActive ? "#60a5fa" : "#f1f5f9",
-                  textShadow: "0 1px 3px rgba(0,0,0,0.9)",
-                  letterSpacing: "0.3px"
-                }}
-              >
-                {b.name}
-              </span>
+              {(!compact || showAllLabels || isCurrentActive || hoveredId === b.id) && (
+                <span
+                  style={{
+                    position: "absolute",
+                    ...(b.labelPos === "bottom" ? { top: "10px" } : { bottom: "10px" }),
+                    whiteSpace: "nowrap",
+                    fontSize: compact ? "7px" : "8px",
+                    fontWeight: 700,
+                    color: isCurrentActive ? "#60a5fa" : "#f1f5f9",
+                    background: isCurrentActive ? "rgba(15, 23, 42, 0.95)" : "rgba(15, 23, 42, 0.75)",
+                    padding: "1px 4px",
+                    borderRadius: "3px",
+                    border: isCurrentActive ? "1px solid rgba(96, 165, 250, 0.6)" : "1px solid rgba(255, 255, 255, 0.12)",
+                    textShadow: "0 1px 3px rgba(0,0,0,0.9)",
+                    letterSpacing: "0.3px",
+                    pointerEvents: "none"
+                  }}
+                >
+                  {b.name}
+                </span>
+              )}
 
               {/* Marker icon dot */}
               <div
+                onPointerEnter={() => setHoveredId(b.id)}
+                onPointerLeave={() => setHoveredId(null)}
+                onClick={() => setHoveredId((prev) => (prev === b.id ? null : b.id))}
                 style={{
                   width: isCurrentActive ? "10px" : "8px",
                   height: isCurrentActive ? "10px" : "8px",
@@ -528,6 +566,8 @@ export function MiniMap({ playerRef, currentLocation = "outside", interfaceLangu
                   background: b.color,
                   border: isCurrentActive ? "2px solid #ffffff" : "1.5px solid #ffffff",
                   boxShadow: isCurrentActive ? `0 0 8px ${b.color}` : "0 1px 4px rgba(0,0,0,0.6)",
+                  cursor: "pointer",
+                  pointerEvents: "auto",
                   transition: "transform 0.2s ease"
                 }}
               />

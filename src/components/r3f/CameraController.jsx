@@ -87,11 +87,15 @@ export function CameraController({
   playerRef,
   cameraAnglesRef,
   currentLocation,
-  isDialogOpen
+  isDialogOpen,
+  hasModalOpen = false
 }) {
   const { camera } = useThree();
   const isDraggingRef = useRef(false);
   const prevMousePosRef = useRef({ x: 0, y: 0 });
+  const isTouchDraggingRef = useRef(false);
+  const activeTouchIdRef = useRef(null);
+  const prevTouchPosRef = useRef({ x: 0, y: 0 });
   const currentLocationRef = useRef(currentLocation);
   const prevPlayerPosRef = useRef({ x: 0, z: 0 });
   const smoothRadiusRef = useRef(GTA_OUTDOOR_RADIUS);
@@ -103,15 +107,26 @@ export function CameraController({
 
   useEffect(() => {
     const handleMouseDown = (e) => {
-      if (isDialogOpen) return;
+      if (isDialogOpen || hasModalOpen) return;
       if (e.button !== 0) return;
-      if (e.target && (e.target.tagName === "BUTTON" || e.target.tagName === "INPUT" || e.target.closest("button") || e.target.closest("input"))) return;
+      if (
+        e.target &&
+        (e.target.tagName === "BUTTON" ||
+          e.target.tagName === "INPUT" ||
+          e.target.closest("button") ||
+          e.target.closest("input") ||
+          e.target.closest("[role='dialog']") ||
+          e.target.closest("[role='toolbar']") ||
+          e.target.closest("[data-touch-ignore]"))
+      ) {
+        return;
+      }
       isDraggingRef.current = true;
       prevMousePosRef.current = { x: e.clientX, y: e.clientY };
     };
 
     const handleMouseMove = (e) => {
-      if (!isDraggingRef.current || isDialogOpen) return;
+      if (!isDraggingRef.current || isDialogOpen || hasModalOpen) return;
       const deltaX = e.clientX - prevMousePosRef.current.x;
       const deltaY = e.clientY - prevMousePosRef.current.y;
       prevMousePosRef.current = { x: e.clientX, y: e.clientY };
@@ -134,17 +149,110 @@ export function CameraController({
       isDraggingRef.current = false;
     };
 
+    const handleTouchStart = (e) => {
+      if (isDialogOpen || hasModalOpen) return;
+      if (e.touches && e.touches.length > 1) {
+        // Multi-touch gesture (e.g. pinch) - do not rotate camera
+        activeTouchIdRef.current = null;
+        isTouchDraggingRef.current = false;
+        return;
+      }
+      if (activeTouchIdRef.current !== null) return;
+      const touch = e.changedTouches[0];
+      if (!touch) return;
+
+      const target = e.target;
+      if (
+        target &&
+        (target.tagName === "BUTTON" ||
+          target.tagName === "INPUT" ||
+          target.tagName === "TEXTAREA" ||
+          target.closest("button") ||
+          target.closest("input") ||
+          target.closest("textarea") ||
+          target.closest("[role='dialog']") ||
+          target.closest("[role='toolbar']") ||
+          target.closest(".hud-container") ||
+          target.closest(".minimap-container") ||
+          target.closest(".mobile-joystick") ||
+          target.closest(".mobile-action-buttons") ||
+          target.closest(".interaction-prompt-btn") ||
+          target.closest("[data-touch-ignore]"))
+      ) {
+        return;
+      }
+
+      activeTouchIdRef.current = touch.identifier;
+      isTouchDraggingRef.current = true;
+      prevTouchPosRef.current = { x: touch.clientX, y: touch.clientY };
+    };
+
+    const handleTouchMove = (e) => {
+      if (!isTouchDraggingRef.current || isDialogOpen || hasModalOpen || activeTouchIdRef.current === null) return;
+      if (e.touches && e.touches.length > 1) {
+        // Interrupted by second finger - cancel camera drag to prevent sudden jumps
+        activeTouchIdRef.current = null;
+        isTouchDraggingRef.current = false;
+        return;
+      }
+      let matchedTouch = null;
+      for (let i = 0; i < e.changedTouches.length; i++) {
+        if (e.changedTouches[i].identifier === activeTouchIdRef.current) {
+          matchedTouch = e.changedTouches[i];
+          break;
+        }
+      }
+      if (!matchedTouch) return;
+
+      const deltaX = matchedTouch.clientX - prevTouchPosRef.current.x;
+      const deltaY = matchedTouch.clientY - prevTouchPosRef.current.y;
+      prevTouchPosRef.current = { x: matchedTouch.clientX, y: matchedTouch.clientY };
+
+      const angles = cameraAnglesRef.current;
+      if (currentLocationRef.current === "outside") {
+        angles.theta -= deltaX * 0.005;
+        angles.theta = Math.atan2(Math.sin(angles.theta), Math.cos(angles.theta));
+
+        angles.phi += deltaY * 0.005;
+        angles.phi = Math.max(GTA_MIN_PHI, Math.min(GTA_MAX_PHI, angles.phi));
+      } else {
+        angles.theta -= deltaX * 0.006;
+        angles.phi -= deltaY * 0.006;
+        angles.phi = Math.max(0.2, Math.min(Math.PI / 2 - 0.05, angles.phi));
+      }
+    };
+
+    const handleTouchEnd = (e) => {
+      if (activeTouchIdRef.current === null) return;
+      for (let i = 0; i < e.changedTouches.length; i++) {
+        if (e.changedTouches[i].identifier === activeTouchIdRef.current) {
+          activeTouchIdRef.current = null;
+          isTouchDraggingRef.current = false;
+          break;
+        }
+      }
+    };
+
     window.addEventListener("mousedown", handleMouseDown);
     window.addEventListener("mousemove", handleMouseMove);
     window.addEventListener("mouseup", handleMouseUp);
     window.addEventListener("blur", handleMouseUp);
+    window.addEventListener("touchstart", handleTouchStart, { passive: true });
+    window.addEventListener("touchmove", handleTouchMove, { passive: true });
+    window.addEventListener("touchend", handleTouchEnd, { passive: true });
+    window.addEventListener("touchcancel", handleTouchEnd, { passive: true });
+
     return () => {
       window.removeEventListener("mousedown", handleMouseDown);
       window.removeEventListener("mousemove", handleMouseMove);
       window.removeEventListener("mouseup", handleMouseUp);
       window.removeEventListener("blur", handleMouseUp);
+      window.removeEventListener("touchstart", handleTouchStart);
+      window.removeEventListener("touchmove", handleTouchMove);
+      window.removeEventListener("touchend", handleTouchEnd);
+      window.removeEventListener("touchcancel", handleTouchEnd);
     };
-  }, [isDialogOpen, cameraAnglesRef]);
+  }, [isDialogOpen, hasModalOpen, cameraAnglesRef]);
 
   useFrame((state, delta) => {
     if (!playerRef.current) return;
@@ -353,7 +461,7 @@ export function CameraController({
       );
       prevPlayerPosRef.current = { x: playerPos.x, z: playerPos.z };
 
-      if (!isDraggingRef.current && isMoving) {
+      if (!isDraggingRef.current && !isTouchDraggingRef.current && isMoving) {
         const playerRotY = playerRef.current.rotation.y;
         const targetTheta = playerRotY + Math.PI;
         let diff = targetTheta - angles.theta;

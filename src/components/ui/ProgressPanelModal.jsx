@@ -223,6 +223,8 @@ export function ProgressPanelModal({
       style={{
         position: "fixed",
         inset: 0,
+        width: "100%",
+        height: "100dvh",
         zIndex: 70,
         background: "rgba(10, 15, 29, 0.75)",
         backdropFilter: "blur(10px)",
@@ -230,7 +232,7 @@ export function ProgressPanelModal({
         display: "flex",
         justifyContent: "center",
         alignItems: "center",
-        padding: "16px",
+        padding: "clamp(8px, 2.5vw, 16px)",
         fontFamily: "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
         color: "#fff"
       }}
@@ -240,7 +242,7 @@ export function ProgressPanelModal({
         style={{
           width: "100%",
           maxWidth: "620px",
-          maxHeight: "90vh",
+          maxHeight: "min(720px, calc(100dvh - 24px))",
           display: "flex",
           flexDirection: "column",
           background: "rgba(24, 24, 32, 0.96)",
@@ -253,7 +255,7 @@ export function ProgressPanelModal({
         {/* Header */}
         <div
           style={{
-            padding: "20px 24px 16px 24px",
+            padding: "clamp(12px, 3vw, 20px) clamp(14px, 3.5vw, 24px) 12px clamp(14px, 3.5vw, 24px)",
             borderBottom: "1px solid rgba(255, 255, 255, 0.08)",
             display: "flex",
             alignItems: "center",
@@ -296,12 +298,14 @@ export function ProgressPanelModal({
               border: "1px solid rgba(255, 255, 255, 0.12)",
               color: "#cbd5e1",
               borderRadius: "10px",
-              width: "34px",
-              height: "34px",
+              width: "44px",
+              height: "44px",
+              minWidth: "44px",
+              minHeight: "44px",
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
-              fontSize: "16px",
+              fontSize: "18px",
               cursor: "pointer",
               transition: "all 0.15s ease"
             }}
@@ -311,7 +315,7 @@ export function ProgressPanelModal({
         </div>
 
         {/* Content Body (Scrollable) */}
-        <div style={{ padding: "20px 24px", overflowY: "auto", flex: 1 }}>
+        <div className="modal-scrollable" style={{ padding: "clamp(14px, 3.5vw, 20px) clamp(14px, 3.5vw, 24px)", overflowY: "auto", flex: 1 }}>
           {/* Summary Stat Cards Grid */}
           <div
             style={{

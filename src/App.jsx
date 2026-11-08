@@ -3,6 +3,15 @@ import { VillageCanvas } from "./components/r3f/VillageCanvas";
 import { MiniMap } from "./components/ui/MiniMap";
 import { ProgressPanelModal } from "./components/ui/ProgressPanelModal";
 import { SettingsModal } from "./components/ui/SettingsModal";
+import { MobileJoystick } from "./components/ui/MobileJoystick";
+import { MobileActionButtons } from "./components/ui/MobileActionButtons";
+import {
+  useDeviceCapabilities,
+  getLayoutMode,
+  isTouchCapable,
+  shouldShowTouchControls,
+  getLayoutClass
+} from "./services/deviceDetection";
 import { AuthScreen } from "./components/auth/AuthScreen";
 import { OnboardingScreen } from "./components/onboarding/OnboardingScreen";
 import { subscribeToAuthState, signOutUser, isUserVerified } from "./services/auth";
@@ -56,10 +65,39 @@ import {
 const OUTDOOR_RADIUS = 3.55;
 const OUTDOOR_BASE_PHI = 1.415;
 
+const isDevModeRequested =
+  typeof window !== "undefined" &&
+  new URLSearchParams(window.location.search).get("dev") === "true";
+
 function App() {
-  const [authUser, setAuthUser] = useState(null);
-  const [authLoading, setAuthLoading] = useState(true);
-  const [userProfile, setUserProfile] = useState(null);
+  const [authUser, setAuthUser] = useState(() => {
+    if (isDevModeRequested) {
+      return {
+        uid: "dev_mock_uid",
+        email: "dev@languagevillage.test",
+        displayName: "Student Explorer",
+        emailVerified: true
+      };
+    }
+    return null;
+  });
+  const [authLoading, setAuthLoading] = useState(() => !isDevModeRequested);
+  const [userProfile, setUserProfile] = useState(() => {
+    if (isDevModeRequested) {
+      return {
+        uid: "dev_mock_uid",
+        displayName: "Student Explorer",
+        onboardingCompleted: true,
+        learningPreferences: {
+          language: "en",
+          learningLanguage: "en",
+          level: "beginner"
+        },
+        stats: { totalXP: 100 }
+      };
+    }
+    return null;
+  });
   const [profileLoading, setProfileLoading] = useState(false);
   const [profileError, setProfileError] = useState(null);
 
@@ -86,6 +124,8 @@ function App() {
   };
 
   useEffect(() => {
+    if (isDevModeRequested) return;
+
     let isCancelled = false;
 
     const unsubscribe = subscribeToAuthState(async (user) => {
@@ -176,6 +216,44 @@ function App() {
       setActiveMission(getLocalizedMission(currentMissionRef.current, interfaceLanguage));
     }
   }, [interfaceLanguage]);
+
+  // Mobile virtual joystick & device capability detection
+  const joystickVecRef = useRef({ x: 0, y: 0 });
+  const device = useDeviceCapabilities();
+  const showMobileControls = device.showTouchControls;
+
+  // Phase 4.2: First meaningful user gesture unlocks Web Audio / TTS on mobile Safari & mobile Chrome
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    let unlocked = false;
+    const unlockAudio = () => {
+      if (unlocked) return;
+      unlocked = true;
+
+      try {
+        if ("speechSynthesis" in window) {
+          if (window.speechSynthesis.paused) {
+            window.speechSynthesis.resume();
+          }
+        }
+      } catch {}
+
+      window.removeEventListener("pointerdown", unlockAudio);
+      window.removeEventListener("touchstart", unlockAudio);
+      window.removeEventListener("keydown", unlockAudio);
+    };
+
+    window.addEventListener("pointerdown", unlockAudio, { passive: true, once: true });
+    window.addEventListener("touchstart", unlockAudio, { passive: true, once: true });
+    window.addEventListener("keydown", unlockAudio, { passive: true, once: true });
+
+    return () => {
+      window.removeEventListener("pointerdown", unlockAudio);
+      window.removeEventListener("touchstart", unlockAudio);
+      window.removeEventListener("keydown", unlockAudio);
+    };
+  }, []);
 
   const lastShopMissionIndexRef = useRef(-1);
   const recentShopMissionIdsRef = useRef([]);
@@ -360,6 +438,60 @@ function App() {
   const [voiceFeedback, setVoiceFeedback] = useState(null);
   const [replayingMessageIndex, setReplayingMessageIndex] = useState(null);
   const speakTextRef = useRef(null);
+
+  // Window diagnostic hook for testing and inspecting responsive controls in real-time
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    window.__diagnoseMobileControls = () => {
+      const joystickEl = document.querySelector(".mobile-joystick");
+      const actionButtonsEl = document.querySelector(".mobile-action-buttons");
+      const isMovementLocked = Boolean(
+        dialogState.isOpen || exitEvaluation || isProgressPanelOpen || isSettingsOpen
+      );
+
+      const liveWidth = window.innerWidth;
+      const liveHeight = window.innerHeight;
+      const liveTouch = isTouchCapable();
+      const liveMode = getLayoutMode(liveWidth, liveHeight);
+      const liveShowControls = shouldShowTouchControls(liveMode, liveTouch);
+      const liveLayoutClass = getLayoutClass(liveMode);
+
+      return {
+        viewportWidth: liveWidth,
+        viewportHeight: liveHeight,
+        visualViewport: window.visualViewport
+          ? {
+              width: window.visualViewport.width,
+              height: window.visualViewport.height,
+              scale: window.visualViewport.scale
+            }
+          : null,
+        isTouchCapable: liveTouch,
+        layoutMode: liveMode,
+        layoutClass: liveLayoutClass,
+        showMobileControls: liveShowControls,
+        joystickDomPresent: Boolean(joystickEl),
+        joystickVisible: joystickEl
+          ? window.getComputedStyle(joystickEl).display !== "none" &&
+            window.getComputedStyle(joystickEl).opacity !== "0"
+          : false,
+        actionButtonsDomPresent: Boolean(actionButtonsEl),
+        actionButtonsVisible: actionButtonsEl
+          ? window.getComputedStyle(actionButtonsEl).display !== "none"
+          : false,
+        joystickVector: { ...joystickVecRef.current },
+        isMovementLocked,
+        currentLocation,
+        playerPosition: playerRef.current
+          ? {
+              x: playerRef.current.position.x,
+              y: playerRef.current.position.y,
+              z: playerRef.current.position.z
+            }
+          : null
+      };
+    };
+  }, [dialogState.isOpen, exitEvaluation, isProgressPanelOpen, isSettingsOpen, currentLocation]);
 
   const speakText = (text, npcName = null, ttsSource = "npc_dialogue", initialTrace = null) => {
     if (typeof window === "undefined" || !("speechSynthesis" in window)) {
@@ -1010,10 +1142,10 @@ JSON Schema:
 
     if (doorType === "Exit Shop") {
       setCurrentLocation("outside");
-      playerRef.current.position.set(0, 0, 5.0);
+      playerRef.current.position.set(0, 0, 3.8);
     } else if (doorType === "Exit Cafe") {
       setCurrentLocation("outside");
-      playerRef.current.position.set(-12, 0, 5.0);
+      playerRef.current.position.set(-12, 0, 3.8);
     } else if (doorType === "Exit Hotel") {
       setCurrentLocation("outside");
       playerRef.current.position.set(9.5, 0, 3.8);
@@ -1855,12 +1987,31 @@ JSON Schema:
     }
   };
 
+  const handleMobileInteract = () => {
+    if (dialogState.isOpen || exitEvaluation || isEvaluatingRef.current) return;
+    if (itemPrompt) {
+      handlePickupItem(itemPrompt);
+    } else if (doorPrompt) {
+      handleInteractDoor();
+    }
+  };
+
+  const handleMobileTalk = () => {
+    if (exitEvaluation) return;
+    handleInteractNPC();
+  };
+
+  const handleMobileStats = () => {
+    if (exitEvaluationRef.current || isSettingsOpenRef.current) return;
+    setIsProgressPanelOpen((prev) => !prev);
+  };
+
   if (authLoading) {
     return (
       <div
         style={{
-          width: "100vw",
-          height: "100vh",
+          width: "100%",
+          height: "100dvh",
           display: "flex",
           flexDirection: "column",
           justifyContent: "center",
@@ -1898,8 +2049,8 @@ JSON Schema:
     return (
       <div
         style={{
-          width: "100vw",
-          height: "100vh",
+          width: "100%",
+          height: "100dvh",
           display: "flex",
           flexDirection: "column",
           justifyContent: "center",
@@ -1921,8 +2072,8 @@ JSON Schema:
     return (
       <div
         style={{
-          width: "100vw",
-          height: "100vh",
+          width: "100%",
+          height: "100dvh",
           display: "flex",
           flexDirection: "column",
           justifyContent: "center",
@@ -2009,14 +2160,14 @@ JSON Schema:
   }
 
   return (
-    <div style={{ width: "100vw", height: "100vh", position: "relative", overflow: "hidden" }}>
+    <div className={`game-viewport ${device.layoutClass}`} style={{ width: "100%", height: "100dvh", position: "relative", overflow: "hidden" }}>
       {/* R3F 3D Canvas */}
       <VillageCanvas
         playerRef={playerRef}
         cameraAnglesRef={cameraAnglesRef}
         currentLocation={currentLocation}
         isDialogOpen={dialogState.isOpen}
-        hasModalOpen={Boolean(activeMission || exitEvaluation || isProgressPanelOpen || isSettingsOpen)}
+        hasModalOpen={Boolean(exitEvaluation || isProgressPanelOpen || isSettingsOpen)}
         isTalking={dialogState.status === "speaking"}
         shopItems={DEFAULT_SHOP_3D_ITEMS}
         collectedItemIds={collectedItemIds}
@@ -2028,23 +2179,42 @@ JSON Schema:
         }}
         onInteractDoor={handleInteractDoor}
         onInteractNPC={handleInteractNPC}
+        joystickVecRef={joystickVecRef}
       />
 
-      {/* Control navigation hints */}
-      {!dialogState.isOpen && !exitEvaluation && (
-        <div
-          style={{
-            position: "absolute",
-            top: "15px",
-            left: "15px",
-            background: "rgba(0,0,0,0.6)",
-            color: "white",
-            padding: "8px 14px",
-            borderRadius: "8px",
-            fontSize: "13px",
-            pointerEvents: "none"
-          }}
-        >
+      {/* Mobile Touch Gameplay Controls (Joystick & Action Buttons) */}
+      {showMobileControls && (
+        <>
+          <MobileJoystick
+            onMove={(vec) => {
+              joystickVecRef.current = vec;
+            }}
+            disabled={
+              dialogState.isOpen ||
+              Boolean(exitEvaluation || isProgressPanelOpen || isSettingsOpen)
+            }
+            size={device.height <= 480 && device.isLandscape ? 116 : 140}
+            knobSize={device.height <= 480 && device.isLandscape ? 46 : 54}
+          />
+          <MobileActionButtons
+            doorPrompt={doorPrompt}
+            npcPrompt={npcPrompt}
+            itemPrompt={itemPrompt}
+            onInteract={handleMobileInteract}
+            onTalk={handleMobileTalk}
+            onToggleStats={handleMobileStats}
+            disabled={
+              dialogState.isOpen ||
+              Boolean(exitEvaluation || isProgressPanelOpen || isSettingsOpen)
+            }
+            interfaceLanguage={interfaceLanguage}
+          />
+        </>
+      )}
+
+      {/* Control navigation hints (hidden on touch/mobile devices) */}
+      {!dialogState.isOpen && !exitEvaluation && !showMobileControls && (
+        <div className="controls-hint-bar">
           {interfaceLanguage === "ko" ? (
             <span>
               🖱️ <strong>마우스 드래그:</strong> 시점 전환 | ⌨️ <strong>WASD:</strong> 이동 | 🚪 <strong>E:</strong> 출입 / 결과 | 💬 <strong>F:</strong> 대화 | 📊 <strong>M:</strong> 통계
@@ -2128,25 +2298,8 @@ JSON Schema:
 
       {/* User Session & Settings (Top-Left HUD) */}
       {!dialogState.isOpen && !exitEvaluation && (
-        <div
-          style={{
-            position: "absolute",
-            top: "56px",
-            left: "15px",
-            zIndex: 15,
-            display: "flex",
-            alignItems: "center",
-            gap: "10px",
-            background: "rgba(15, 23, 42, 0.8)",
-            backdropFilter: "blur(8px)",
-            border: "1px solid rgba(255, 255, 255, 0.12)",
-            padding: "6px 12px",
-            borderRadius: "8px",
-            color: "#f8fafc",
-            fontSize: "13px"
-          }}
-        >
-          <span style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}>
+        <div className="hud-top-left hud-container">
+          <span style={{ display: "inline-flex", alignItems: "center", gap: "6px", flexWrap: "wrap" }}>
             <span style={{ fontSize: "14px" }}>👤</span>
             <strong>{userProfile?.displayName || authUser?.displayName || authUser?.email?.split("@")[0] || "Student"}</strong>
             <span
@@ -2155,7 +2308,7 @@ JSON Schema:
                 fontWeight: "700",
                 background: "rgba(234, 179, 8, 0.2)",
                 color: "#fde047",
-                padding: "1px 6px",
+                padding: "2px 6px",
                 borderRadius: "6px"
               }}
             >
@@ -2163,12 +2316,13 @@ JSON Schema:
             </span>
             {Boolean(userProfile?.streak?.current) && (
               <span
+                className="hud-badge-streak"
                 style={{
                   fontSize: "11px",
                   fontWeight: "700",
                   background: "rgba(249, 115, 22, 0.2)",
                   color: "#fb923c",
-                  padding: "1px 6px",
+                  padding: "2px 6px",
                   borderRadius: "6px"
                 }}
               >
@@ -2177,12 +2331,13 @@ JSON Schema:
             )}
             {learningLevel && (
               <span
+                className="hud-badge-level"
                 style={{
                   fontSize: "11px",
                   fontWeight: "600",
                   background: "rgba(37, 99, 235, 0.25)",
                   color: "#93c5fd",
-                  padding: "1px 6px",
+                  padding: "2px 6px",
                   borderRadius: "6px",
                   textTransform: "capitalize"
                 }}
@@ -2192,55 +2347,69 @@ JSON Schema:
               </span>
             )}
           </span>
-          <button
-            onClick={() => setIsProgressPanelOpen(true)}
-            style={{
-              background: "rgba(37, 99, 235, 0.25)",
-              border: "1px solid rgba(37, 99, 235, 0.5)",
-              color: "#93c5fd",
-              borderRadius: "6px",
-              padding: "3px 8px",
-              fontSize: "11px",
-              fontWeight: "600",
-              cursor: "pointer"
-            }}
-          >
-            📊 {interfaceLanguage === "ko" ? "통계" : "Statistics"}
-          </button>
-          <button
-            onClick={() => setIsSettingsOpen(true)}
-            style={{
-              background: "rgba(168, 85, 247, 0.25)",
-              border: "1px solid rgba(168, 85, 247, 0.5)",
-              color: "#d8b4fe",
-              borderRadius: "6px",
-              padding: "3px 8px",
-              fontSize: "11px",
-              fontWeight: "600",
-              cursor: "pointer"
-            }}
-          >
-            ⚙️ {t("hud.openSettings", {}, interfaceLanguage)}
-          </button>
-          <button
-            onClick={() => {
-              setIsProgressPanelOpen(false);
-              setIsSettingsOpen(false);
-              signOutUser();
-            }}
-            style={{
-              background: "rgba(239, 68, 68, 0.2)",
-              border: "1px solid rgba(239, 68, 68, 0.4)",
-              color: "#fca5a5",
-              borderRadius: "6px",
-              padding: "3px 8px",
-              fontSize: "11px",
-              fontWeight: "600",
-              cursor: "pointer"
-            }}
-          >
-            {t("auth.signOut", {}, interfaceLanguage) || "Log Out"}
-          </button>
+          <div className="hud-btn-group" style={{ display: "inline-flex", alignItems: "center", gap: "6px", flexWrap: "wrap" }}>
+            <button
+              className="hud-stats-btn"
+              onClick={() => setIsProgressPanelOpen(true)}
+              style={{
+                background: "rgba(37, 99, 235, 0.25)",
+                border: "1px solid rgba(37, 99, 235, 0.5)",
+                color: "#93c5fd",
+                borderRadius: "6px",
+                padding: "5px 9px",
+                fontSize: "11px",
+                fontWeight: "600",
+                cursor: "pointer",
+                minHeight: "32px",
+                display: "inline-flex",
+                alignItems: "center"
+              }}
+            >
+              📊 {interfaceLanguage === "ko" ? "통계" : "Stats"}
+            </button>
+            <button
+              className="hud-settings-btn"
+              onClick={() => setIsSettingsOpen(true)}
+              style={{
+                background: "rgba(168, 85, 247, 0.25)",
+                border: "1px solid rgba(168, 85, 247, 0.5)",
+                color: "#d8b4fe",
+                borderRadius: "6px",
+                padding: "5px 9px",
+                fontSize: "11px",
+                fontWeight: "600",
+                cursor: "pointer",
+                minHeight: "32px",
+                display: "inline-flex",
+                alignItems: "center"
+              }}
+            >
+              ⚙️ {t("hud.openSettings", {}, interfaceLanguage)}
+            </button>
+            <button
+              className="hud-signout-btn"
+              onClick={() => {
+                setIsProgressPanelOpen(false);
+                setIsSettingsOpen(false);
+                signOutUser();
+              }}
+              style={{
+                background: "rgba(239, 68, 68, 0.2)",
+                border: "1px solid rgba(239, 68, 68, 0.4)",
+                color: "#fca5a5",
+                borderRadius: "6px",
+                padding: "5px 9px",
+                fontSize: "11px",
+                fontWeight: "600",
+                cursor: "pointer",
+                minHeight: "32px",
+                display: "inline-flex",
+                alignItems: "center"
+              }}
+            >
+              {t("auth.signOut", {}, interfaceLanguage) || "Log Out"}
+            </button>
+          </div>
         </div>
       )}
 
@@ -2250,32 +2419,13 @@ JSON Schema:
           playerRef={playerRef}
           currentLocation={currentLocation}
           interfaceLanguage={interfaceLanguage}
+          compact={device.isMobile}
         />
       )}
 
       {/* Shop Mission & Inventory Panel (Top-Right, below MiniMap) */}
       {currentLocation === "Shop" && !exitEvaluation && (
-        <div
-          style={{
-            position: "absolute",
-            top: "215px",
-            right: "16px",
-            width: "220px",
-            background: "rgba(15, 23, 42, 0.92)",
-            backdropFilter: "blur(10px)",
-            WebkitBackdropFilter: "blur(10px)",
-            border: "1px solid rgba(255, 255, 255, 0.18)",
-            borderRadius: "12px",
-            boxShadow: "0 8px 24px rgba(0, 0, 0, 0.5)",
-            padding: "12px 14px",
-            color: "white",
-            zIndex: 10,
-            display: "flex",
-            flexDirection: "column",
-            gap: "10px",
-            fontFamily: "system-ui, -apple-system, sans-serif"
-          }}
-        >
+        <div className="shop-inventory-panel modal-scrollable hud-container">
           {/* Header */}
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: "1px solid rgba(255, 255, 255, 0.12)", paddingBottom: "6px" }}>
             <span style={{ fontSize: "12px", fontWeight: "700", textTransform: "uppercase", letterSpacing: "0.5px", color: "#60a5fa" }}>
@@ -2417,74 +2567,71 @@ JSON Schema:
         </div>
       )}
 
-      {/* Item Pickup prompt (E) */}
+      {/* Item Pickup prompt (E / Tap) */}
       {itemPrompt && !dialogState.isOpen && !exitEvaluation && (
-        <div
-          style={{
-            position: "absolute",
-            zIndex: 10,
-            bottom: "80px",
-            left: "50%",
-            transform: "translateX(-50%)",
-            background: "rgba(15, 23, 42, 0.9)",
-            border: "1px solid rgba(59, 130, 246, 0.5)",
-            color: "white",
-            padding: "12px 24px",
-            borderRadius: "12px",
-            textAlign: "center",
-            fontSize: "16px",
-            boxShadow: "0 8px 24px rgba(0, 0, 0, 0.5)",
-            backdropFilter: "blur(8px)"
-          }}
+        <button
+          type="button"
+          className="interaction-prompt-btn"
+          onClick={() => handlePickupItem(itemPrompt)}
+          title={
+            showMobileControls
+              ? (interfaceLanguage === "ko" ? "아이템 획득" : "Pick up item")
+              : (interfaceLanguage === "ko" ? "아이템 획득 (터치 또는 E)" : "Pick up item (Tap or E)")
+          }
         >
-          <div style={{ display: "flex", alignItems: "center", gap: "8px", justifyContent: "center" }}>
-            <span style={{ fontSize: "20px" }}>
-              {ITEM_DEFINITIONS[itemPrompt.itemId]?.icon || "📦"}
+          <span style={{ fontSize: "20px" }}>
+            {ITEM_DEFINITIONS[itemPrompt.itemId]?.icon || "📦"}
+          </span>
+          {showMobileControls ? (
+            <span>
+              {interfaceLanguage === "ko" ? (
+                <>터치: <strong>{getLocalizedItemName(itemPrompt.itemId, interfaceLanguage) || itemPrompt.displayName}</strong> 획득</>
+              ) : (
+                <>Tap to pick up <strong>{getLocalizedItemName(itemPrompt.itemId, interfaceLanguage) || itemPrompt.displayName}</strong></>
+              )}
             </span>
-            {interfaceLanguage === "ko" ? (
-              <span>
-                <strong style={{ color: "#60a5fa" }}>E</strong> 키를 눌러 <strong>{getLocalizedItemName(itemPrompt.itemId, interfaceLanguage) || itemPrompt.displayName}</strong> 획득
-              </span>
-            ) : (
-              <span>
-                Press <strong style={{ color: "#60a5fa" }}>E</strong> to pick up{" "}
-                <strong>{getLocalizedItemName(itemPrompt.itemId, interfaceLanguage) || itemPrompt.displayName}</strong>
-              </span>
-            )}
-          </div>
-        </div>
+          ) : (
+            <span>
+              {interfaceLanguage === "ko" ? (
+                <><strong style={{ color: "#60a5fa" }}>E</strong> / 터치: <strong>{getLocalizedItemName(itemPrompt.itemId, interfaceLanguage) || itemPrompt.displayName}</strong> 획득</>
+              ) : (
+                <>Press <strong style={{ color: "#60a5fa" }}>E</strong> or Tap to pick up <strong>{getLocalizedItemName(itemPrompt.itemId, interfaceLanguage) || itemPrompt.displayName}</strong></>
+              )}
+            </span>
+          )}
+        </button>
       )}
 
-      {/* Door interaction prompt (E) */}
+      {/* Door interaction prompt (E / Tap) */}
       {doorPrompt && !itemPrompt && !dialogState.isOpen && !exitEvaluation && (
-        <div
-          style={{
-            position: "absolute",
-            zIndex: 10,
-            bottom: "80px",
-            left: "50%",
-            transform: "translateX(-50%)",
-            background: "rgba(0, 0, 0, 0.8)",
-            color: "white",
-            padding: "12px 24px",
-            borderRadius: "10px",
-            textAlign: "center",
-            fontSize: "17px",
-            boxShadow: "0 4px 15px rgba(0,0,0,0.4)"
-          }}
+        <button
+          type="button"
+          className="interaction-prompt-btn"
+          onClick={handleInteractDoor}
+          title={doorPrompt}
         >
-          <div><strong>{doorPrompt}</strong></div>
-          <div style={{ marginTop: "4px", fontSize: "14px", color: "#ddd" }}>
-            {doorPrompt.startsWith("Exit")
-              ? t("prompts.exitDoor", {}, interfaceLanguage)
-              : t("prompts.enterDoor", {}, interfaceLanguage)}
+          <span style={{ fontSize: "20px" }}>🚪</span>
+          <div>
+            <div><strong>{doorPrompt}</strong></div>
+            <div style={{ marginTop: "2px", fontSize: "12px", color: "#93c5fd", fontWeight: "normal" }}>
+              {showMobileControls
+                ? (doorPrompt.startsWith("Exit")
+                    ? (interfaceLanguage === "ko" ? "터치하여 나가기" : "Tap to exit")
+                    : (interfaceLanguage === "ko" ? "터치하여 입장" : "Tap to enter"))
+                : (doorPrompt.startsWith("Exit")
+                    ? (interfaceLanguage === "ko" ? "터치 또는 E: 나가기" : "Tap or press E to exit")
+                    : (interfaceLanguage === "ko" ? "터치 또는 E: 입장" : "Tap or press E to enter"))}
+            </div>
           </div>
-        </div>
+        </button>
       )}
 
       {/* Active Mission Intro Modal */}
       {activeMission && !dialogState.isOpen && !exitEvaluation && (
         <div
+          role="dialog"
+          aria-modal="true"
+          className="modal-scrollable"
           style={{
             position: "absolute",
             zIndex: 20,
@@ -2493,33 +2640,38 @@ JSON Schema:
             transform: "translate(-50%, -50%)",
             background: "white",
             color: "#222",
-            padding: "30px",
-            borderRadius: "15px",
-            width: "380px",
+            padding: "clamp(20px, 4vw, 30px)",
+            borderRadius: "16px",
+            width: "min(380px, calc(100vw - 32px))",
+            maxHeight: "min(520px, calc(100dvh - 40px))",
+            overflowY: "auto",
             boxShadow: "0 10px 35px rgba(0,0,0,0.4)",
             textAlign: "center"
           }}
         >
-          <h2 style={{ margin: "0 0 10px 0" }}>{activeMission.title}</h2>
-          <p style={{ fontSize: "16px", lineHeight: "1.5" }}>{activeMission.text || activeMission.goal}</p>
-          <p style={{ color: "#666", fontSize: "14px" }}>
+          <h2 style={{ margin: "0 0 10px 0", fontSize: "20px" }}>{activeMission.title}</h2>
+          <p style={{ fontSize: "15px", lineHeight: "1.5" }}>{activeMission.text || activeMission.goal}</p>
+          <p style={{ color: "#666", fontSize: "13px" }}>
             {interfaceLanguage === "ko" ? (
-              <span><strong>F</strong> 키를 눌러 NPC와 대화하세요. <strong>F</strong> 키를 다시 누르면 대화창이 닫힙니다.</span>
+              <span><strong>F</strong> 키 또는 대화 버튼을 눌러 NPC와 대화하세요.</span>
             ) : (
-              <span>Talk to the NPC using <strong>F</strong>. Press <strong>F</strong> again to close dialogue.</span>
+              <span>Talk to the NPC using <strong>F</strong> or tap prompt. Press <strong>F</strong> again to close dialogue.</span>
             )}
           </p>
           <button
+            type="button"
             onClick={() => setActiveMission(null)}
             style={{
               marginTop: "15px",
-              padding: "10px 24px",
+              padding: "12px 28px",
               border: "none",
-              borderRadius: "8px",
+              borderRadius: "10px",
               background: "#222",
               color: "white",
               cursor: "pointer",
-              fontSize: "16px"
+              fontSize: "15px",
+              fontWeight: "600",
+              minHeight: "44px"
             }}
           >
             {interfaceLanguage === "ko" ? "미션 시작" : "Start Mission"}
@@ -2527,51 +2679,58 @@ JSON Schema:
         </div>
       )}
 
-      {/* NPC Proximity Prompt (F) */}
+      {/* NPC Proximity Prompt (F / Tap) */}
       {npcPrompt && !itemPrompt && !dialogState.isOpen && !exitEvaluation && (
-        <div
-          style={{
-            position: "absolute",
-            zIndex: 10,
-            bottom: "80px",
-            left: "50%",
-            transform: "translateX(-50%)",
-            background: "rgba(0, 0, 0, 0.8)",
-            color: "white",
-            padding: "12px 24px",
-            borderRadius: "10px",
-            fontSize: "17px",
-            boxShadow: "0 4px 15px rgba(0,0,0,0.4)"
-          }}
+        <button
+          type="button"
+          className="interaction-prompt-btn"
+          onClick={handleInteractNPC}
+          title={npcPrompt}
         >
-          {t("prompts.talkToNpc", { npc: npcPrompt }, interfaceLanguage)}
-        </div>
+          <span style={{ fontSize: "20px" }}>💬</span>
+          <span>
+            {showMobileControls
+              ? (interfaceLanguage === "ko"
+                  ? `${npcPrompt} (터치하여 대화)`
+                  : `Talk to ${npcPrompt} (Tap)`)
+              : (interfaceLanguage === "ko"
+                  ? `${npcPrompt} (터치 또는 F: 대화)`
+                  : `Talk to ${npcPrompt} (Tap or F)`)}
+          </span>
+        </button>
       )}
 
       {/* Exit Evaluation Modal */}
       {exitEvaluation && (
         <div
+          role="dialog"
+          aria-modal="true"
           style={{
             position: "absolute",
             zIndex: 50,
             top: 0,
             left: 0,
-            width: "100vw",
-            height: "100vh",
+            width: "100%",
+            height: "100dvh",
             background: "rgba(0, 0, 0, 0.75)",
             backdropFilter: "blur(8px)",
+            WebkitBackdropFilter: "blur(8px)",
             display: "flex",
             justifyContent: "center",
-            alignItems: "center"
+            alignItems: "center",
+            padding: "clamp(10px, 3vw, 20px)"
           }}
         >
           <div
+            className="modal-scrollable"
             style={{
-              width: "480px",
+              width: "min(480px, calc(100vw - 24px))",
+              maxHeight: "min(640px, calc(100dvh - 32px))",
+              overflowY: "auto",
               background: "#1e1e24",
               color: "#fff",
               borderRadius: "18px",
-              padding: "28px",
+              padding: "clamp(18px, 4vw, 28px)",
               boxShadow: "0 20px 50px rgba(0,0,0,0.6)",
               border: "1px solid rgba(255,255,255,0.15)",
               fontFamily: "system-ui, sans-serif"
@@ -2759,28 +2918,10 @@ JSON Schema:
 
       {/* NPC Chat Window */}
       {dialogState.isOpen && (
-        <div
-          style={{
-            position: "absolute",
-            zIndex: 30,
-            right: "30px",
-            bottom: "30px",
-            width: "420px",
-            maxHeight: "560px",
-            background: "rgba(25, 25, 25, 0.95)",
-            backdropFilter: "blur(12px)",
-            borderRadius: "18px",
-            boxShadow: "0 12px 40px rgba(0,0,0,0.6)",
-            border: "1px solid rgba(255,255,255,0.15)",
-            display: "flex",
-            flexDirection: "column",
-            overflow: "hidden",
-            color: "white"
-          }}
-        >
+        <div className="dialog-window" role="dialog" aria-modal="true">
           <div
             style={{
-              padding: "16px 20px",
+              padding: "14px 18px",
               background: "rgba(255,255,255,0.05)",
               borderBottom: "1px solid rgba(255,255,255,0.1)",
               display: "flex",
@@ -2798,13 +2939,19 @@ JSON Schema:
               type="button"
               onClick={closeDialog}
               title={t("dialog.closeDialogTitle", {}, interfaceLanguage)}
+              aria-label={t("dialog.closeDialogTitle", {}, interfaceLanguage)}
               style={{
                 background: "transparent",
                 border: "none",
                 color: "#aaa",
-                fontSize: "20px",
+                fontSize: "22px",
                 cursor: "pointer",
-                padding: "4px"
+                padding: "8px",
+                minWidth: "44px",
+                minHeight: "44px",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center"
               }}
             >
               ✕
@@ -3078,8 +3225,9 @@ JSON Schema:
               onClick={handleToggleListening}
               disabled={dialogState.status === "thinking" || dialogState.status === "speaking"}
               style={{
-                padding: "8px 16px",
-                borderRadius: "20px",
+                padding: "10px 18px",
+                borderRadius: "22px",
+                minHeight: "44px",
                 border: "none",
                 background: dialogState.status === "listening" ? "#ef4444" : "#1976d2",
                 color: "white",

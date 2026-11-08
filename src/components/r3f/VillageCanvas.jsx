@@ -31,7 +31,8 @@ export function VillageCanvas({
   onPickupItem,
   onPromptChange,
   onInteractDoor,
-  onInteractNPC
+  onInteractNPC,
+  joystickVecRef
 }) {
   return (
     <Canvas
@@ -39,8 +40,8 @@ export function VillageCanvas({
       shadows
       camera={{ fov: 70, position: [0, 5, 10], near: 0.1, far: 1000 }}
       style={{
-        width: "100vw",
-        height: "100vh",
+        width: "100%",
+        height: "100%",
         position: "absolute",
         top: 0,
         left: 0,
@@ -110,12 +111,14 @@ export function VillageCanvas({
           onInteractDoor={onInteractDoor}
           onInteractNPC={onInteractNPC}
           onPickupItem={onPickupItem}
+          joystickVecRef={joystickVecRef}
         />
         <CameraController
           playerRef={playerRef}
           cameraAnglesRef={cameraAnglesRef}
           currentLocation={currentLocation}
           isDialogOpen={isDialogOpen}
+          hasModalOpen={hasModalOpen}
         />
       </Suspense>
     </Canvas>

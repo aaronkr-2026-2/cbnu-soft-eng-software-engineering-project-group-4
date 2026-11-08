@@ -4,6 +4,7 @@ import { useGLTF } from "@react-three/drei";
 import { useFrame } from "@react-three/fiber";
 import { VILLAGE_BUILDINGS } from "./villageBuildingsConfig";
 import { DEFAULT_SHOP_3D_ITEMS } from "../../services/inventoryLogic";
+import { combineMovementInputs, applyCameraRelativeVectors } from "../../services/joystickLogic";
 
 const BUILDINGS_CONFIG = [
   { name: "Shop", x: 0, z: -2.5, halfW: 3.8, halfD: 5.5 },
@@ -59,14 +60,13 @@ export function Player({
   onPromptChange,
   onInteractDoor,
   onInteractNPC,
-  onPickupItem
+  onPickupItem,
+  joystickVecRef
 }) {
   const groupRef = useRef();
   const keysRef = useRef({ w: false, a: false, s: false, d: false });
   const prevPromptRef = useRef({ door: null, npc: null, item: null });
   const activeItemRef = useRef(null);
-  const forwardVecRef = useRef(new THREE.Vector3());
-  const rightVecRef = useRef(new THREE.Vector3());
 
   const mixerRef = useRef(null);
   const walkActionRef = useRef(null);
@@ -136,6 +136,15 @@ export function Player({
 
   // Klaviatura
   useEffect(() => {
+    // Clear active keys immediately if modal or dialogue opens
+    if (isDialogOpen || hasModalOpen) {
+      keysRef.current.w = false;
+      keysRef.current.s = false;
+      keysRef.current.a = false;
+      keysRef.current.d = false;
+      return;
+    }
+
     const handleKeyDown = (e) => {
       if (e.isComposing || e.keyCode === 229) return;
       const targetTag = e.target?.tagName?.toLowerCase();
@@ -143,13 +152,15 @@ export function Player({
         return;
       }
 
-      const code = e.code;
-      if (code === "KeyF") {
+      const code = e.code || "";
+      const k = e.key ? e.key.toLowerCase() : "";
+
+      if (code === "KeyF" || k === "f") {
         onInteractNPC();
         return;
       }
       if (isDialogOpen || hasModalOpen) return;
-      if (code === "KeyE") {
+      if (code === "KeyE" || k === "e") {
         if (activeItemRef.current && onPickupItem) {
           onPickupItem(activeItemRef.current);
           return;
@@ -158,18 +169,19 @@ export function Player({
         return;
       }
 
-      if (code === "KeyW") keysRef.current.w = true;
-      if (code === "KeyS") keysRef.current.s = true;
-      if (code === "KeyA") keysRef.current.a = true;
-      if (code === "KeyD") keysRef.current.d = true;
+      if (code === "KeyW" || k === "w" || code === "ArrowUp" || k === "arrowup") keysRef.current.w = true;
+      if (code === "KeyS" || k === "s" || code === "ArrowDown" || k === "arrowdown") keysRef.current.s = true;
+      if (code === "KeyA" || k === "a" || code === "ArrowLeft" || k === "arrowleft") keysRef.current.a = true;
+      if (code === "KeyD" || k === "d" || code === "ArrowRight" || k === "arrowright") keysRef.current.d = true;
     };
 
     const handleKeyUp = (e) => {
-      const code = e.code;
-      if (code === "KeyW") keysRef.current.w = false;
-      if (code === "KeyS") keysRef.current.s = false;
-      if (code === "KeyA") keysRef.current.a = false;
-      if (code === "KeyD") keysRef.current.d = false;
+      const code = e.code || "";
+      const k = e.key ? e.key.toLowerCase() : "";
+      if (code === "KeyW" || k === "w" || code === "ArrowUp" || k === "arrowup") keysRef.current.w = false;
+      if (code === "KeyS" || k === "s" || code === "ArrowDown" || k === "arrowdown") keysRef.current.s = false;
+      if (code === "KeyA" || k === "a" || code === "ArrowLeft" || k === "arrowleft") keysRef.current.a = false;
+      if (code === "KeyD" || k === "d" || code === "ArrowRight" || k === "arrowright") keysRef.current.d = false;
     };
 
     const handleBlur = () => {
@@ -431,40 +443,14 @@ export function Player({
       playerRef.current = groupRef.current;
     }
 
-    const keys = keysRef.current;
-    const hasInput = (keys.w || keys.s || keys.a || keys.d) && !isDialogOpen && !hasModalOpen;
+    const combined = combineMovementInputs({
+      keys: keysRef.current,
+      joystick: joystickVecRef?.current,
+      isDialogOpen,
+      hasModalOpen
+    });
 
-    let moveX = 0;
-    let moveZ = 0;
-
-    if (hasInput) {
-      const theta = cameraAnglesRef.current.theta;
-      const forward = forwardVecRef.current;
-      const right = rightVecRef.current;
-
-      forward.set(-Math.sin(theta), 0, -Math.cos(theta));
-      right.set(Math.cos(theta), 0, -Math.sin(theta));
-
-      if (keys.w) {
-        moveX += forward.x;
-        moveZ += forward.z;
-      }
-      if (keys.s) {
-        moveX -= forward.x;
-        moveZ -= forward.z;
-      }
-      if (keys.a) {
-        moveX -= right.x;
-        moveZ -= right.z;
-      }
-      if (keys.d) {
-        moveX += right.x;
-        moveZ += right.z;
-      }
-    }
-
-    const inputLen = Math.hypot(moveX, moveZ);
-    const isMoving = hasInput && inputLen > 0.001;
+    const isMoving = combined.isMoving;
     groupRef.current.userData.isMoving = isMoving;
 
     // Handle walk / idle animation transitions smoothly
@@ -497,26 +483,33 @@ export function Player({
     }
 
     if (isMoving) {
-      const speed = 0.065 * (delta * 60);
+      const theta = cameraAnglesRef.current?.theta ?? 0;
+      const { worldX, worldZ } = applyCameraRelativeVectors({
+        inputX: combined.normX,
+        inputY: combined.normY,
+        theta
+      });
 
-      const normX = moveX / inputLen;
-      const normZ = moveZ / inputLen;
+      if (Number.isFinite(worldX) && Number.isFinite(worldZ)) {
+        // Speed proportional to input magnitude (gives analog joystick fine control, capped at 1.0)
+        const speed = 0.065 * combined.magnitude * (delta * 60);
 
-      // Smoothly rotate character to face movement direction
-      const targetRotation = Math.atan2(normX, normZ);
-      let diff = targetRotation - groupRef.current.rotation.y;
-      diff = Math.atan2(Math.sin(diff), Math.cos(diff));
-      const turnSpeed = 14;
-      groupRef.current.rotation.y += diff * Math.min(1.0, turnSpeed * delta);
+        // Smoothly rotate character to face movement direction
+        const targetRotation = Math.atan2(worldX, worldZ);
+        let diff = targetRotation - groupRef.current.rotation.y;
+        diff = Math.atan2(Math.sin(diff), Math.cos(diff));
+        const turnSpeed = 14;
+        groupRef.current.rotation.y += diff * Math.min(1.0, turnSpeed * delta);
 
-      const deltaX = normX * speed;
-      const deltaZ = normZ * speed;
+        const deltaX = worldX * speed;
+        const deltaZ = worldZ * speed;
 
-      const newX = groupRef.current.position.x + deltaX;
-      const newZ = groupRef.current.position.z + deltaZ;
-      const safe = checkCollisions(newX, newZ);
-      groupRef.current.position.x = safe.x;
-      groupRef.current.position.z = safe.z;
+        const newX = groupRef.current.position.x + deltaX;
+        const newZ = groupRef.current.position.z + deltaZ;
+        const safe = checkCollisions(newX, newZ);
+        groupRef.current.position.x = safe.x;
+        groupRef.current.position.z = safe.z;
+      }
     }
 
     // Masofalarni tekshirish (Eshik va NPC)
@@ -627,7 +620,7 @@ export function Player({
   });
 
   return (
-    <group ref={groupRef} position={[0, 0, 5.0]}>
+    <group ref={groupRef} position={[0, 0, 3.8]}>
       {/* Qahramon - aniq 1.70m bo'y va to'g'ri masshtab guruhi */}
       <group scale={[0.0091225, 0.0091225, 0.0091225]}>
         <primitive object={gltf.scene} />
