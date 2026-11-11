@@ -1,87 +1,18 @@
 import { useEffect, useRef } from "react";
 import { useThree, useFrame } from "@react-three/fiber";
-import { VILLAGE_BUILDINGS } from "./villageBuildingsConfig";
+import {
+  GTA_OUTDOOR_RADIUS,
+  GTA_OUTDOOR_BASE_PHI,
+  GTA_MIN_PHI,
+  GTA_MAX_PHI,
+  GTA_TARGET_Y,
+  GTA_MIN_CAMERA_Y,
+  GTA_MIN_FOLLOW_RADIUS,
+  checkCameraBuildingCollision,
+  findSafeCameraAngle,
+  resolveCameraBuildingPenetration
+} from "../../services/cameraCollisionLogic.js";
 
-const GTA_OUTDOOR_RADIUS = 3.55;
-const GTA_OUTDOOR_BASE_PHI = 1.415;
-const GTA_MIN_PHI = 0.65;
-const GTA_MAX_PHI = 1.70;
-const GTA_TARGET_Y = 1.35;
-const GTA_MIN_CAMERA_Y = 0.45;
-const GTA_MIN_FOLLOW_RADIUS = 1.2;
-
-const OUTDOOR_BUILDINGS_COLLISION = [
-  { name: "Shop", x: 0, z: -2.5, halfW: 3.8, halfD: 5.5 },
-  { name: "Cafe", x: -12, z: 0, halfW: 4.0, halfD: 3.0 },
-  { name: "Building Behind Cafe", x: -15, z: -10, halfW: 3.5, halfD: 3.5 },
-  ...VILLAGE_BUILDINGS.map((b) => ({
-    name: b.name,
-    x: b.position[0],
-    z: b.position[2],
-    halfW: b.collision.halfW,
-    halfD: b.collision.halfD
-  }))
-];
-
-function checkCameraBuildingCollision(pX, pZ, camX, camZ, maxDist) {
-  const dx = camX - pX;
-  const dz = camZ - pZ;
-  const rayLen = Math.hypot(dx, dz);
-  if (rayLen < 0.001) return maxDist;
-
-  const ux = dx / rayLen;
-  const uz = dz / rayLen;
-  const margin = 0.35;
-
-  let closestDist = maxDist;
-
-  for (let i = 0; i < OUTDOOR_BUILDINGS_COLLISION.length; i++) {
-    const b = OUTDOOR_BUILDINGS_COLLISION[i];
-    const minX = b.x - b.halfW - margin;
-    const maxX = b.x + b.halfW + margin;
-    const minZ = b.z - b.halfD - margin;
-    const maxZ = b.z + b.halfD + margin;
-
-    let tNear = -Infinity;
-    let tFar = Infinity;
-
-    if (Math.abs(ux) > 1e-6) {
-      let t1 = (minX - pX) / ux;
-      let t2 = (maxX - pX) / ux;
-      if (t1 > t2) {
-        const tmp = t1;
-        t1 = t2;
-        t2 = tmp;
-      }
-      if (t1 > tNear) tNear = t1;
-      if (t2 < tFar) tFar = t2;
-      if (tNear > tFar) continue;
-    } else if (pX < minX || pX > maxX) {
-      continue;
-    }
-
-    if (Math.abs(uz) > 1e-6) {
-      let t1 = (minZ - pZ) / uz;
-      let t2 = (maxZ - pZ) / uz;
-      if (t1 > t2) {
-        const tmp = t1;
-        t1 = t2;
-        t2 = tmp;
-      }
-      if (t1 > tNear) tNear = t1;
-      if (t2 < tFar) tFar = t2;
-      if (tNear > tFar) continue;
-    } else if (pZ < minZ || pZ > maxZ) {
-      continue;
-    }
-
-    if (tNear > 0 && tNear < closestDist) {
-      closestDist = tNear;
-    }
-  }
-
-  return closestDist;
-}
 
 export function CameraController({
   playerRef,
@@ -97,6 +28,7 @@ export function CameraController({
   const activeTouchIdRef = useRef(null);
   const prevTouchPosRef = useRef({ x: 0, y: 0 });
   const currentLocationRef = useRef(currentLocation);
+  const lastLocationRef = useRef(currentLocation);
   const prevPlayerPosRef = useRef({ x: 0, z: 0 });
   const smoothRadiusRef = useRef(GTA_OUTDOOR_RADIUS);
   const isInitializedRef = useRef(false);
@@ -489,6 +421,46 @@ export function CameraController({
       );
       angles.phi = currentPhi;
 
+      // When transitioning to outside from an interior, immediately resolve safe angle and distance
+      if (currentLocation !== lastLocationRef.current) {
+        if (currentLocation === "outside") {
+          const initHDist = targetRadius * Math.sin(currentPhi);
+          const initCamX = playerPos.x + initHDist * Math.sin(angles.theta);
+          const initCamZ = playerPos.z + initHDist * Math.cos(angles.theta);
+          const initAllowed = checkCameraBuildingCollision(
+            playerPos.x,
+            playerPos.z,
+            initCamX,
+            initCamZ,
+            targetRadius
+          );
+          if (initAllowed < 1.6) {
+            angles.theta = findSafeCameraAngle(
+              playerPos.x,
+              playerPos.z,
+              angles.theta,
+              currentPhi,
+              targetRadius
+            );
+          }
+          const safeHDist = targetRadius * Math.sin(currentPhi);
+          const safeCamX = playerPos.x + safeHDist * Math.sin(angles.theta);
+          const safeCamZ = playerPos.z + safeHDist * Math.cos(angles.theta);
+          const safeAllowed = checkCameraBuildingCollision(
+            playerPos.x,
+            playerPos.z,
+            safeCamX,
+            safeCamZ,
+            targetRadius
+          );
+          smoothRadiusRef.current = Math.min(
+            targetRadius,
+            Math.max(GTA_MIN_FOLLOW_RADIUS, safeAllowed - 0.25)
+          );
+        }
+        lastLocationRef.current = currentLocation;
+      }
+
       const targetY = GTA_TARGET_Y;
       const hDist = targetRadius * Math.sin(currentPhi);
       const desiredCamX = playerPos.x + hDist * Math.sin(angles.theta);
@@ -501,21 +473,55 @@ export function CameraController({
         desiredCamZ,
         targetRadius
       );
+
+      // If camera line-of-sight is blocked by a building and user is not manually rotating,
+      // search for a clear azimuth angle to keep player and surrounding area unobstructed
+      if (allowedDist < 1.4 && !isDraggingRef.current && !isTouchDraggingRef.current) {
+        const safeTheta = findSafeCameraAngle(
+          playerPos.x,
+          playerPos.z,
+          angles.theta,
+          currentPhi,
+          targetRadius
+        );
+        if (safeTheta !== angles.theta) {
+          let angleDiff = safeTheta - angles.theta;
+          angleDiff = Math.atan2(Math.sin(angleDiff), Math.cos(angleDiff));
+          const blendSpeed = 4.0;
+          angles.theta += angleDiff * (1.0 - Math.exp(-blendSpeed * delta));
+          angles.theta = Math.atan2(Math.sin(angles.theta), Math.cos(angles.theta));
+        }
+      }
+
       const effectiveTargetRadius = Math.min(
         targetRadius,
-        Math.max(GTA_MIN_FOLLOW_RADIUS, allowedDist - 0.2)
+        Math.max(GTA_MIN_FOLLOW_RADIUS, allowedDist - 0.25)
       );
 
-      const rSpeed = effectiveTargetRadius < smoothRadiusRef.current ? 12.0 : 4.0;
-      smoothRadiusRef.current +=
-        (effectiveTargetRadius - smoothRadiusRef.current) * (1.0 - Math.exp(-rSpeed * delta));
+      // Pull in immediately upon hitting an obstruction so camera never penetrates walls.
+      // Push back out smoothly when obstruction disappears.
+      if (effectiveTargetRadius < smoothRadiusRef.current) {
+        smoothRadiusRef.current = effectiveTargetRadius;
+      } else {
+        const restoreSpeed = 4.0;
+        smoothRadiusRef.current +=
+          (effectiveTargetRadius - smoothRadiusRef.current) * (1.0 - Math.exp(-restoreSpeed * delta));
+      }
 
       const finalHDist = smoothRadiusRef.current * Math.sin(currentPhi);
-      const camX = playerPos.x + finalHDist * Math.sin(angles.theta);
+      let camX = playerPos.x + finalHDist * Math.sin(angles.theta);
       let camY = targetY + smoothRadiusRef.current * Math.cos(currentPhi);
-      const camZ = playerPos.z + finalHDist * Math.cos(angles.theta);
+      let camZ = playerPos.z + finalHDist * Math.cos(angles.theta);
 
+      // Slightly elevate camera when pulled in close to wall for clear view over shoulder
+      const closeFactor = Math.max(0, (1.8 - smoothRadiusRef.current) / 1.4);
+      camY += closeFactor * 0.45;
       camY = Math.max(GTA_MIN_CAMERA_Y, camY);
+
+      // Failsafe: guarantee camera position is never inside any building geometry
+      const resolved = resolveCameraBuildingPenetration(camX, camZ, 0.2);
+      camX = resolved.camX;
+      camZ = resolved.camZ;
 
       camera.position.set(camX, camY, camZ);
       camera.lookAt(playerPos.x, targetY, playerPos.z);

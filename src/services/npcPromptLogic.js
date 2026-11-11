@@ -500,14 +500,26 @@ export function getNPCProfile(npcName) {
 
 /**
  * Returns the natural spoken initial greeting for each NPC, strictly following
- * the user's selected learningLanguage.
+ * the user's selected learningLanguage and contextual scenario if available.
  *
  * @param {string} npcName
  * @param {"en"|"ko"} [language="en"]
+ * @param {Object|null} [scenario=null] - Optional active contextual scenario
  * @returns {string} Natural greeting phrase
  */
-export function getNPCInitialGreeting(npcName, language = "en") {
+export function getNPCInitialGreeting(npcName, language = "en", scenario = null) {
   const lang = language === "ko" ? "ko" : "en";
+
+  // If active scenario defines a natural contextual greeting, prioritize it!
+  if (scenario) {
+    const contextualGreeting =
+      typeof scenario.initialGreeting === "object" && scenario.initialGreeting !== null
+        ? scenario.initialGreeting[lang] || scenario.initialGreeting.en
+        : null;
+    if (contextualGreeting && typeof contextualGreeting === "string" && contextualGreeting.trim()) {
+      return contextualGreeting.trim();
+    }
+  }
 
   if (lang === "ko") {
     switch (npcName) {
@@ -714,31 +726,37 @@ export function buildNPCSystemPrompt(params = {}) {
     }
 
     let missionContext = "손님은 특별한 미션 배정 없이 상점/시설을 자유롭게 둘러보는 중입니다.";
-    if (missionInfo.goal) {
-      const missionTitle = missionInfo.title ? `"${missionInfo.title}"` : "배정된 미션";
-      missionContext = `손님은 현재 ${missionTitle}을(를) 수행 중입니다.
-미션 목표: "${missionInfo.goal}"
-- 손님이 필요한 물품이나 주문에 대해 묻는다면 해당 위치나 상태를 친절하게 안내해 주세요.
-- 손님이 미션 물품을 찾거나 확인을 요청하면 상냥하게 대답해 주세요.`;
+    const scenarioKo = activeMission?.scenarioContext?.ko || activeMission?.scenarioContext;
+    if (scenarioKo) {
+      missionContext = `[당신의 현재 일상 상황 및 맥락]
+${scenarioKo}
+(상황 배경: "${missionInfo.goal}")
 
-      if (inventory && typeof inventory === "object" && Object.keys(inventory).length > 0) {
-        const summary = formatInventorySummary(inventory, "ko");
-        missionContext += `\n손님의 현재 배낭 소지품: ${summary}.`;
+[상황 대화 지침]
+- 당신은 현실 속 실제 마을 주민(${profile.koreanRole || profile.role})입니다.
+- 자신의 현재 상황, 일상, 기분, 날씨, 취향에 대해 사람답게 자연스럽게 이야기하세요.
+- 손님의 일상적인 질문(가격, 판매 품목, 단어 뜻, 시설 안내 등)에는 사실에 입각하여 정확하고 친절하게 답변하세요.
+- [엄격한 미션 코칭 금지 규칙]: 절대로 플레이어의 게임 미션 해결을 돕거나 코칭하지 마세요.
+- 절대로 특정 물품이 미션 대상이라는 이유로 해당 물품을 구매하라고 추천하거나 제안하지 마세요.
+- 절대로 플레이어에게 수행해야 할 미션, 과제, 목표, 수량 목록을 지시하거나 상기시키지 마세요.
+- 절대로 힌트, 정답 지침, 단계별 공략법을 제공하지 마세요.
+- 손님이 "내 미션이 뭐예요?", "내가 뭘 해야 하죠?", "뭘 사야 해?", "정답이 뭐예요?" 등 미션이나 할 일에 대해 직접 묻더라도, 절대로 역할을 깨지 말고 시뮬레이션 주민으로서 정중하게 넘어가세요. (예: "미션이라니요? 무슨 말씀이신지 잘 모르겠네요. 저는 이곳 ${profile.koreanRole || profile.role}이라서 손님의 개인 과제는 알지 못해요. 화면의 미션 안내창을 확인해 보시고, 주문이나 찾으시는 것이 있으시면 편하게 말씀해 주세요.")
+- 손님이 하는 말에 귀 기울이고, 상대방의 대화에 맞추어 생생하고 친절하게 대화하세요.`;
+    } else if (missionInfo.goal) {
+      const missionTitle = missionInfo.title ? `"${missionInfo.title}"` : "배경 상황";
+      missionContext = `[상황 맥락: ${missionTitle}]
+(상황 배경: "${missionInfo.goal}")
+- 손님의 일상적인 질문(가격, 판매 품목, 단어 뜻, 시설 안내 등)에는 사실에 입각하여 정확하고 친절하게 답변하세요.
+- [엄격한 코칭 금지 규칙]: 절대로 플레이어의 게임 미션 해결을 돕거나 코칭하지 마세요.
+- 절대로 미션 목표, 요구 조건, 수량, 해결 방법을 먼저 설명하거나 지침을 주지 마세요.
+- 절대로 특정 물품이 미션 요구품이라는 이유로 해당 물품을 구매하라고 추천하거나 상기시키지 마세요.
+- 절대로 플레이어의 가방 소지품 부족 목록이나 미션 진행도를 읊지 마세요.
+- 손님이 "내 미션이 뭐예요?"라고 직접 묻더라도, 절대로 역할을 깨지 말고 시뮬레이션 주민답게 반응하세요.`;
+    }
 
-        const required =
-          missionInfo.requiredItems.length > 0
-            ? missionInfo.requiredItems
-            : parseMissionRequiredItems(missionInfo.goal);
-        const validation = validateMissionInventory(required, inventory, "ko");
-        if (!validation.isComplete) {
-          const missingList = Object.entries(validation.missingItems)
-            .map(([id, qty]) => `${ITEM_DEFINITIONS[id]?.localizedNames?.ko || ITEM_DEFINITIONS[id]?.displayName || id} ${qty}개`)
-            .join(", ");
-          missionContext += `\n아직 필요한 미션 물품: ${missingList}. 손님이 더 모아야 할 물건을 물어보면 친절하게 알려주세요.`;
-        } else {
-          missionContext += `\n손님이 미션에 필요한 모든 물품을 모았습니다! 계산이나 출구로 안내해 주세요.`;
-        }
-      }
+    if (inventory && typeof inventory === "object" && Object.keys(inventory).length > 0) {
+      const summary = formatInventorySummary(inventory, "ko");
+      missionContext += `\n(참고: 손님의 현재 배낭 소지품: ${summary}. 손님에게 무엇을 더 사라고 지시하거나 코칭하지 마세요.)`;
     }
 
     return `당신은 3D 언어 학습 마을의 ${profile.koreanFacility || profile.facility}에서 근무하는 ${profile.koreanRole || profile.role} ${profile.koreanName || profile.name}입니다.
@@ -756,9 +774,12 @@ ${missionContext}
 1. 당신은 ${profile.koreanName || profile.name}입니다. 절대로 자신이 AI, 인공지능, 챗봇, 언어 모델임을 밝히지 마세요.
 2. 1~3개의 짧고 완성된 한국어 구어체 문장으로 대답하세요. 친절하고 자연스러운 존댓말(해요체)을 사용하세요.
 3. 기계적인 번역투나 부자연스러운 어순을 피하고, 실제 한국인 사장님/직원처럼 자연스럽고 또렷한 한국어를 구사하세요.
-4. 절대로 이모지(😊, ✨ 등), 마크다운 기호(**, *), 괄호 지문(*(미소 지으며)*, [웃음]), 따옴표를 출력하지 마세요. 바로 소리 내어 말할 수 있는 순수한 대사만 출력하세요.
-5. 절대로 '미션을 완료했습니다', '점수를 부여합니다' 등 게임 시스템 판정을 직접 언급하지 마세요. 당신은 시뮬레이션 속 마을 주민입니다.
-6. 손님이 서투른 말이나 영어로 질문하더라도 다정하고 인내심 있게 쉬운 한국어로 안내해 주세요.`;
+4. 손님의 일상적인 질문(가격, 품목 위치, 단어 설명, 시설 이용 등)에는 사실에 맞게 친절하고 자연스럽게 대답하세요.
+5. [코칭 및 힌트 금지]: 절대로 미션 목표, 필수 수량, 공략법, 힌트를 먼저 제시하거나 설명하지 마세요.
+6. 절대로 플레이어에게 무엇을 해야 한다고 상기시키거나, 특정 물품이 미션 대상이라는 이유로 추천하거나, 부족한 물품 목록을 읊지 마세요.
+7. 절대로 '미션을 완료했습니다', '점수를 부여합니다' 등 게임 시스템 판정을 직접 언급하지 마세요. 당신은 시뮬레이션 속 마을 주민입니다.
+8. 절대로 이모지(😊, ✨ 등), 마크다운 기호(**, *), 괄호 지문(*(미소 지으며)*, [웃음]), 따옴표를 출력하지 마세요. 바로 소리 내어 말할 수 있는 순수한 대사만 출력하세요.
+9. 손님이 미션이나 할 일, 필요한 물품에 대해 직접 묻더라도, 절대로 역할을 깨지 말고 시뮬레이션 주민으로서 정중하게 대처하세요. (예: "미션이라니요? 저는 이곳 ${profile.koreanRole || profile.role}이라서 손님의 과제는 잘 알지 못해요. 화면의 미션 안내창을 확인해 보세요.")`;
   }
 
   // ENGLISH LEARNING PROMPT
@@ -770,30 +791,49 @@ ${missionContext}
   }
 
   let missionContext = "The player is visiting freely without an assigned task.";
-  if (missionInfo.goal) {
+  const scenarioEn = activeMission?.scenarioContext?.en || activeMission?.scenarioContext;
+  if (scenarioEn) {
+    const missionTitle = missionInfo.title ? `"${missionInfo.title}"` : "Village Scenario";
+    missionContext = `The player is currently visiting ${missionTitle}.
+[YOUR CURRENT DAILY SITUATION & CONTEXT]
+${scenarioEn}
+(Context: "${missionInfo.goal}")
+
+[CONVERSATION & ROLEPLAY GUIDELINES]
+- You are a real resident of this village living your day (${profile.role}).
+- Answer ordinary factual questions naturally and truthfully (prices, product availability, item locations, vocabulary, general services).
+- STRICT ANTI-COACHING: NEVER announce, state, or explain any mission, quest, task, requirement, budget, or item list.
+- NEVER give hints designed as direct instructions or step-by-step assistance.
+- NEVER remind the player what they need to do or recommend an item merely because it is a mission objective.
+- If the player asks directly "What is my mission?", "What do I need?", "What should I buy for my task?", "What should I do?", or "What is the answer?", DO NOT break character. Act like a real person in a real village who has no concept of video game "missions" (e.g. "Mission? I'm not sure what you mean! I'm just the ${profile.role} here. Please check your Mission Introduction Window for your task details, and let me know if you need anything from our counter!").
+- Listen carefully to whatever the player says and respond in a warm, contextual, human way.`;
+  } else if (missionInfo.goal) {
     const missionTitle = missionInfo.title ? `"${missionInfo.title}"` : "Assigned Mission";
     missionContext = `The player is currently working on ${missionTitle}.
-Mission Goal: "${missionInfo.goal}"
-- You are fully aware of what items, services, or questions this mission entails.
-- If the player asks what they need to buy or do, guide them helpfully according to this goal.
-- If the player asks where items are or asks for clarification, explain using simple, clear words.`;
+(Context: "${missionInfo.goal}")
+- Answer all ordinary factual questions accurately and truthfully (e.g. prices, item locations, vocabulary, general recommendations).
+- STRICT ANTI-COACHING RULE: You must NEVER coach, guide, or give hints to help the player solve or complete their mission.
+- NEVER announce, state, or explain any mission requirements, required item lists, quantities, or conditions.
+- NEVER tell the player what they should buy or do next to complete their mission.
+- NEVER remind the player what they need to do or recommend an item simply because it is a mission objective.
+- If the player directly asks about a mission, quest, or what they must do, stay completely in character and treat it as normal human conversation without revealing internal task state.`;
+  }
 
-    if (inventory && typeof inventory === "object" && Object.keys(inventory).length > 0) {
-      const summary = formatInventorySummary(inventory, "en");
-      missionContext += `\nPlayer's Current Physical Inventory: ${summary}.`;
-      const required =
-        missionInfo.requiredItems.length > 0
-          ? missionInfo.requiredItems
-          : parseMissionRequiredItems(missionInfo.goal);
-      const validation = validateMissionInventory(required, inventory, "en");
-      if (!validation.isComplete) {
-        const missingList = Object.entries(validation.missingItems)
-          .map(([id, qty]) => `${qty} ${ITEM_DEFINITIONS[id]?.displayName || id}`)
-          .join(", ");
-        missionContext += `\nItems still missing to fulfill mission: ${missingList}. You can tell the player what they still need to collect if they ask.`;
-      } else {
-        missionContext += `\nThe player has collected all required mission items in their backpack! Remind them they are ready to check out at the door.`;
-      }
+  if (inventory && typeof inventory === "object" && Object.keys(inventory).length > 0) {
+    const summary = formatInventorySummary(inventory, "en");
+    missionContext += `\nPlayer's Current Physical Inventory: ${summary}.`;
+    const required =
+      missionInfo.requiredItems.length > 0
+        ? missionInfo.requiredItems
+        : parseMissionRequiredItems(missionInfo.goal);
+    const validation = validateMissionInventory(required, inventory, "en");
+    if (!validation.isComplete) {
+      const missingList = Object.entries(validation.missingItems)
+        .map(([id, qty]) => `${qty} ${ITEM_DEFINITIONS[id]?.displayName || id}`)
+        .join(", ");
+      missionContext += `\nItems still missing to fulfill mission: ${missingList}. (Internal Note: Do not coach or list missing items. Do not reveal this checklist as a mission instruction.)`;
+    } else {
+      missionContext += `\n(Internal Note: Player has collected items. Do not announce mission completion; let the player decide when to exit.)`;
     }
   }
 
@@ -810,10 +850,13 @@ Language & Level Guidelines:
 CRITICAL ROLEPLAY RULES:
 1. Stay in character as ${profile.name}. Never mention you are an AI, LLM, or language model.
 2. Respond in 1-2 short, conversational sentences. Avoid long paragraphs or lecture-style responses.
-3. NEVER claim or announce that the mission is finished, completed, or graded. You are a character in the simulation, not the game evaluator.
-4. Do not mention scores, points, or game system variables.
-5. Do not use markdown formatting (no asterisks, bullet points, or bold text) and do not wrap your reply in quotation marks.
-6. If the player says they do not understand, are confused, or ask for help, explain kindly and simply.`;
+3. Answer all ordinary questions truthfully (prices, available items, vocabulary, facility functions).
+4. NEVER explicitly announce, state, or explain mission objectives, requirements, or give step-by-step guidance, hints, or solutions.
+5. NEVER remind the player what to do, what items are missing, or recommend items merely because they are mission objectives.
+6. NEVER claim or announce that the mission is finished, completed, or graded. You are a character in the simulation, not the game evaluator.
+7. Do not mention scores, points, or game system variables.
+8. Do not use markdown formatting (no asterisks, bullet points, or bold text) and do not wrap your reply in quotation marks.
+9. If the player directly asks about a mission, quest, or what they must do, stay completely in character and treat it as normal human conversation without revealing internal task state. Remind the player politely to check their Mission Introduction Window if they are confused about their task.`;
 }
 
 /**

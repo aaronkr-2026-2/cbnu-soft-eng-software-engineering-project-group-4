@@ -45,8 +45,7 @@ import {
   addItemToInventory,
   isItemAlreadyCollected,
   validateMissionInventory,
-  getLocalizedItemName,
-  formatInventorySummary
+  getLocalizedItemName
 } from "./services/inventoryLogic";
 import {
   MISSIONS_CATALOG,
@@ -171,6 +170,7 @@ function App() {
   const [doorPrompt, setDoorPrompt] = useState(null);
   const [npcPrompt, setNpcPrompt] = useState(null);
   const [activeMission, setActiveMission] = useState(null);
+  const [showMissionIntro, setShowMissionIntro] = useState(false);
   const [exitEvaluation, setExitEvaluation] = useState(null);
   const [isProgressPanelOpen, setIsProgressPanelOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -348,6 +348,7 @@ function App() {
     currentAttemptIdRef.current = generateAttemptId();
     currentMissionRef.current = mission;
     setActiveMission(getLocalizedMission(mission, interfaceLanguage));
+    setShowMissionIntro(true);
   };
 
   const handleUpdateSettings = async ({
@@ -839,7 +840,16 @@ function App() {
       inventory: inventoryRef.current
     });
 
+    // Format conversation history, ensuring the active user message is always present
     const history = formatConversationHistory(messagesHistoryRef.current, 10);
+    const lastHistoryItem = history[history.length - 1];
+    if (!lastHistoryItem || lastHistoryItem.role !== "user" || lastHistoryItem.content !== userMessage.trim()) {
+      history.push({ role: "user", content: userMessage.trim() });
+      const lastRefMsg = messagesHistoryRef.current[messagesHistoryRef.current.length - 1];
+      if (!lastRefMsg || lastRefMsg.sender !== "user" || lastRefMsg.text !== userMessage) {
+        messagesHistoryRef.current.push({ sender: "user", text: userMessage });
+      }
+    }
 
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 15000);
@@ -865,15 +875,50 @@ function App() {
 
       clearTimeout(timeoutId);
 
-      const data = await response.json();
-      if (!response.ok || data.error) throw new Error(data?.error?.message || "AI API error");
+      let data;
+      try {
+        data = await response.json();
+      } catch (jsonErr) {
+        console.error("[AI Diagnostic: JSON Parsing Failure]", jsonErr);
+        throw new Error(`JSON parsing failure: ${jsonErr.message}`);
+      }
 
-      let rawReply = data?.choices?.[0]?.message?.content?.trim();
+      if (!response.ok || data?.error) {
+        const errorMsg = data?.error?.message || `HTTP ${response.status}: ${response.statusText}`;
+        console.error("[AI Diagnostic: API Failure]", {
+          status: response.status,
+          statusText: response.statusText,
+          error: data?.error
+        });
+        throw new Error(`API error: ${errorMsg}`);
+      }
+
+      const rawReply = data?.choices?.[0]?.message?.content?.trim();
+      if (!rawReply) {
+        console.warn("[AI Diagnostic: Empty Reply Content]", data);
+      }
+
       const plan = handleAIResponse({
         rawReply,
         npcName: npc,
-        learningLanguage: currentLearningLang
+        learningLanguage: currentLearningLang,
+        playerInput: userMessage,
+        activeMission: currentMissionRef.current || activeMission
       });
+
+      if (plan.sanitizerApplied) {
+        console.info("[AI Diagnostic: Sanitizer Modified Reply]", {
+          reason: plan.sanitizerReason,
+          rawReply,
+          sanitizedReply: plan.reply
+        });
+      } else {
+        console.info("[AI Diagnostic: Contextual NPC Reply Generated]", {
+          npc,
+          input: userMessage,
+          reply: plan.reply
+        });
+      }
 
       messagesHistoryRef.current.push({ sender: "npc", text: plan.reply });
       setDialogState((prev) => ({
@@ -883,17 +928,37 @@ function App() {
       }));
 
       speakText(plan.textToSpeak, npc, plan.ttsSource, plan.trace);
+
+      if (typeof window !== "undefined") {
+        window.lastAIDiagnostic = {
+          status: "success",
+          npc,
+          userMessage,
+          rawReply,
+          reply: plan.reply,
+          sanitizerApplied: plan.sanitizerApplied,
+          sanitizerReason: plan.sanitizerReason,
+          plan
+        };
+      }
+      return plan;
     } catch (error) {
       clearTimeout(timeoutId);
-      console.error("Groq AI Error:", error);
+      console.error("[AI Diagnostic: Pipeline Exception]", error);
       const isTimeout = error.name === "AbortError";
+      const isParseError = error?.message?.includes("JSON parsing failure");
+      const errorCategory = isTimeout ? "timeout" : (isParseError ? "parse_error" : "api_error");
       setVoiceFeedback(mapSpeechErrorToFeedback(isTimeout ? "timeout" : "api_error", interfaceLanguage));
       const currentLearningLang = learningLanguageRef.current || learningLanguage;
+
       const plan = handleAIResponse({
         rawReply: null,
         npcName: npc,
-        learningLanguage: currentLearningLang
+        learningLanguage: currentLearningLang,
+        error: errorCategory,
+        errorMessage: error?.message
       });
+
       // Notice: Do NOT push errorMsg into messagesHistoryRef.current to avoid polluting history!
       setDialogState((prev) => ({
         ...prev,
@@ -901,10 +966,39 @@ function App() {
         messages: [...prev.messages, { sender: "npc", text: plan.reply }]
       }));
       speakText(plan.textToSpeak, npc, plan.ttsSource, plan.trace);
+
+      if (typeof window !== "undefined") {
+        window.lastAIDiagnostic = {
+          status: "error",
+          npc,
+          userMessage,
+          errorCategory,
+          errorMessage: error?.message,
+          reply: plan.reply,
+          plan
+        };
+      }
+      return plan;
     } finally {
       isGeneratingRef.current = false;
     }
   };
+
+  const generateNPCResponseWithAIRef = useRef(generateNPCResponseWithAI);
+  useEffect(() => {
+    generateNPCResponseWithAIRef.current = generateNPCResponseWithAI;
+  });
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      window.testNPCDialogue = async (message, npc = "Cafe Barista", languageOverride = null) => {
+        if (languageOverride) {
+          learningLanguageRef.current = languageOverride;
+        }
+        return await generateNPCResponseWithAIRef.current?.(message, npc);
+      };
+    }
+  }, []);
 
   const getExaminerNpcTitle = (doorType, lang) => {
     const isKo = lang === "ko";
@@ -945,27 +1039,18 @@ function App() {
             inventoryRef.current,
             uiLang
           );
-          const invStatusMsg = invValidation.isComplete
-            ? (uiLang === "ko"
-                ? "하지만 상점 직원 잭과 목표 언어로 대화하지 않았습니다."
-                : "However, you did not converse with seller Jack in the target language.")
-            : (uiLang === "ko"
-                ? "또한 진열대에서 필요한 물품을 가방에 담지 않았습니다."
-                : "Also, you have not collected the required items from the shelves.");
-          const reqSummary = formatInventorySummary(invValidation.requiredMap, uiLang);
-          const reqDetail = reqSummary ? ` (${reqSummary})` : "";
           setExitEvaluation({
             doorType,
             score: invValidation.isComplete ? 35 : 0,
             completed: false,
             mistakes: [
               uiLang === "ko"
-                ? `내부에서 ${npcTitle}와(과) 전혀 대화하지 않았습니다.`
+                ? `내부에서 ${npcTitle}와(과) 대화하지 않았습니다.`
                 : `You did not speak with ${npcTitle} inside.`
             ],
             feedback: uiLang === "ko"
-              ? `상점 미션을 완수하려면 잭과 대화하고 필요한 물품${reqDetail}을 챙기세요. ${invStatusMsg}`
-              : `To complete the shop mission, speak with Jack and collect the required items${reqDetail}. ${invStatusMsg}`
+              ? "상황에 맞는 소통을 연습하려면 시설 직원과 대화를 나누고 필요한 물건을 확인해 보세요."
+              : "To practice natural communication, converse with the staff and explore what is needed."
           });
           return;
         }
@@ -976,12 +1061,12 @@ function App() {
           completed: false,
           mistakes: [
             uiLang === "ko"
-              ? `내부에서 ${npcTitle}와(과) 전혀 대화하지 않았습니다.`
+              ? `내부에서 ${npcTitle}와(과) 대화하지 않았습니다.`
               : `You did not speak with ${npcTitle} inside.`
           ],
           feedback: uiLang === "ko"
-            ? "미션을 수행하려면 먼저 'F' 키를 눌러 필요한 내용을 대화해 보세요."
-            : "To complete the mission, first press 'F' to converse with the character."
+            ? "상황에 맞는 소통을 연습하려면 먼저 'F' 키를 눌러 캐릭터와 대화를 나눠보세요."
+            : "To practice communication, first press 'F' to converse with the character."
         });
         return;
       }
@@ -989,7 +1074,7 @@ function App() {
       setExitEvaluation({ doorType, loading: true });
 
       const missionGoal = currentMissionRef.current
-        ? getMissionGoal(currentMissionRef.current, learningLang)
+        ? (currentMissionRef.current.hiddenObjective?.[learningLang] || getMissionGoal(currentMissionRef.current, learningLang))
         : (learningLang === "ko" ? "목표 언어로 원활한 상황 대화를 수행하세요." : "Communicate naturally to complete your situational goal.");
 
       const conversationTranscript = messagesHistoryRef.current
@@ -1076,35 +1161,19 @@ JSON Schema:
 
         if (!invValidation.isComplete) {
           finalCompleted = false;
-          if (invValidation.missingList.length > 0) {
-            const missingListText = invValidation.missingList
-              .map((m) => (uiLang === "ko" ? `${m.displayName} ${m.missing}개` : `${m.missing} ${m.displayName}`))
-              .join(", ");
-            finalMistakes.push(
-              uiLang === "ko"
-                ? `부족한 물품: 가방에 ${missingListText}가 부족합니다.`
-                : `Missing items: Your backpack is missing ${missingListText}.`
-            );
-            finalScore = Math.min(finalScore, 65);
-          }
-          if (invValidation.hasExtraItems && invValidation.excessList.length > 0) {
-            const excessListText = invValidation.excessList
-              .map((e) => (uiLang === "ko" ? `${e.displayName} ${e.excess}개` : `${e.excess} extra ${e.displayName}`))
-              .join(", ");
-            finalMistakes.push(
-              uiLang === "ko"
-                ? `초과 물품: 가방에 ${excessListText}가 초과되었습니다.`
-                : `Extra items: Your backpack has ${excessListText}.`
-            );
-            finalScore = Math.min(finalScore, 75);
-          }
+          finalMistakes.push(
+            uiLang === "ko"
+              ? "가방에 담은 물품이 현재 상황 맥락에 부합하지 않습니다."
+              : "The items collected in your backpack did not match the current situational context."
+          );
+          finalScore = Math.min(finalScore, 70);
           finalFeedback += uiLang === "ko"
-            ? " (참고: 가방의 물품이 미션 요구 조건과 일치하지 않습니다)."
-            : " (Note: Backpack items did not fully match mission requirements).";
+            ? " (상황에 맞는 물품 선택과 대화가 더 필요합니다)."
+            : " (Further exploration of items and contextual conversation is needed).";
         } else {
           finalFeedback += uiLang === "ko"
-            ? " (가방에 필요한 모든 물품을 정확히 담았습니다)."
-            : " (All required items collected correctly in backpack).";
+            ? " (상황에 어울리는 물품을 알맞게 고르고 훌륭하게 소통했습니다)."
+            : " (You selected fitting items and communicated wonderfully).";
         }
       }
 
@@ -1314,6 +1383,7 @@ JSON Schema:
       setIsSavingProgress(false);
       setExitEvaluation(null);
       setActiveMission(null);
+      setShowMissionIntro(false);
       setInventory({});
       setCollectedItemIds([]);
       setItemPrompt(null);
@@ -1948,7 +2018,8 @@ JSON Schema:
       npcPrompt,
       messagesHistory: messagesHistoryRef.current,
       isDialogOpen: dialogState.isOpen,
-      learningLanguage: currentLearningLang
+      learningLanguage: currentLearningLang,
+      activeScenario: currentMissionRef.current
     });
 
     if (plan.action === "close") {
@@ -2423,95 +2494,27 @@ JSON Schema:
         />
       )}
 
-      {/* Shop Mission & Inventory Panel (Top-Right, below MiniMap) */}
+      {/* Shop Backpack Inventory Panel (Top-Right, below MiniMap) */}
       {currentLocation === "Shop" && !exitEvaluation && (
         <div className="shop-inventory-panel modal-scrollable hud-container">
           {/* Header */}
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: "1px solid rgba(255, 255, 255, 0.12)", paddingBottom: "6px" }}>
             <span style={{ fontSize: "12px", fontWeight: "700", textTransform: "uppercase", letterSpacing: "0.5px", color: "#60a5fa" }}>
-              {t("hud.shopMissionTitle", {}, interfaceLanguage)}
+              🎒 {t("hud.backpackTitle", {}, interfaceLanguage)}
             </span>
             <span style={{ fontSize: "11px", color: "#94a3b8" }}>
               {t("hud.itemsCount", { count: Object.values(inventory).reduce((sum, count) => sum + count, 0) }, interfaceLanguage)}
             </span>
           </div>
 
-          {/* Mission Checklist */}
-          <div>
-            <div style={{ fontSize: "11px", color: "#94a3b8", marginBottom: "4px", fontWeight: "600" }}>
-              {t("hud.checklistTitle", {}, interfaceLanguage)}
-            </div>
-            {(() => {
-              const activeReqs = validateMissionInventory(
-                activeMission || MISSIONS_CATALOG.Shop[0],
-                inventory,
-                interfaceLanguage
-              );
-              return (
-                <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
-                  {activeReqs.collectedRequirements.map((req) => (
-                    <div
-                      key={req.itemId}
-                      style={{
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "space-between",
-                        fontSize: "12px",
-                        background: req.isMet ? "rgba(34, 197, 94, 0.15)" : "rgba(255, 255, 255, 0.05)",
-                        border: req.isMet ? "1px solid rgba(34, 197, 94, 0.4)" : "1px solid rgba(255, 255, 255, 0.08)",
-                        borderRadius: "6px",
-                        padding: "4px 8px"
-                      }}
-                    >
-                      <span style={{ color: req.isMet ? "#86efac" : "#e2e8f0" }}>
-                        {ITEM_DEFINITIONS[req.itemId]?.icon} {req.displayName}
-                      </span>
-                      <span
-                        style={{
-                          fontWeight: "700",
-                          color: req.isMet ? "#4ade80" : "#facc15",
-                          fontSize: "11px"
-                        }}
-                      >
-                        {req.current}/{req.required} {req.isMet ? "✓" : ""}
-                      </span>
-                    </div>
-                  ))}
-                  {activeReqs.excessList.map((ex) => (
-                    <div
-                      key={`excess-${ex.itemId}`}
-                      style={{
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "space-between",
-                        fontSize: "11px",
-                        background: "rgba(239, 68, 68, 0.15)",
-                        border: "1px solid rgba(239, 68, 68, 0.4)",
-                        borderRadius: "6px",
-                        padding: "3px 8px",
-                        color: "#fca5a5"
-                      }}
-                    >
-                      <span>⚠️ {ex.displayName}</span>
-                      <span>{t("hud.extraItemsBadge", { count: ex.excess }, interfaceLanguage)}</span>
-                    </div>
-                  ))}
-                </div>
-              );
-            })()}
-          </div>
-
           {/* Inventory Items List */}
           <div>
-            <div style={{ fontSize: "11px", color: "#94a3b8", marginBottom: "4px", fontWeight: "600" }}>
-              {t("hud.backpackTitle", {}, interfaceLanguage)}
-            </div>
             {Object.keys(inventory).length === 0 ? (
-              <div style={{ fontSize: "11px", color: "#64748b", fontStyle: "italic", textAlign: "center", padding: "6px 0", whiteSpace: "pre-line" }}>
+              <div style={{ fontSize: "11px", color: "#64748b", fontStyle: "italic", textAlign: "center", padding: "10px 0", whiteSpace: "pre-line" }}>
                 {t("hud.backpackEmpty", {}, interfaceLanguage)}
               </div>
             ) : (
-              <div style={{ display: "flex", flexDirection: "column", gap: "3px" }}>
+              <div style={{ display: "flex", flexDirection: "column", gap: "4px", marginTop: "4px" }}>
                 {Object.entries(inventory).map(([itemId, qty]) => {
                   const def = ITEM_DEFINITIONS[itemId];
                   const localizedName = getLocalizedItemName(itemId, interfaceLanguage) || def?.displayName || itemId;
@@ -2523,9 +2526,10 @@ JSON Schema:
                         alignItems: "center",
                         justifyContent: "space-between",
                         fontSize: "12px",
-                        padding: "3px 6px",
-                        borderRadius: "4px",
-                        background: "rgba(255, 255, 255, 0.04)"
+                        padding: "4px 8px",
+                        borderRadius: "6px",
+                        background: "rgba(255, 255, 255, 0.05)",
+                        border: "1px solid rgba(255, 255, 255, 0.08)"
                       }}
                     >
                       <span>
@@ -2626,55 +2630,112 @@ JSON Schema:
         </button>
       )}
 
+
+
       {/* Active Mission Intro Modal */}
-      {activeMission && !dialogState.isOpen && !exitEvaluation && (
+      {showMissionIntro && activeMission && !dialogState.isOpen && !exitEvaluation && (
         <div
           role="dialog"
           aria-modal="true"
           className="modal-scrollable"
           style={{
             position: "absolute",
-            zIndex: 20,
+            zIndex: 25,
             top: "50%",
             left: "50%",
             transform: "translate(-50%, -50%)",
-            background: "white",
-            color: "#222",
-            padding: "clamp(20px, 4vw, 30px)",
-            borderRadius: "16px",
-            width: "min(380px, calc(100vw - 32px))",
-            maxHeight: "min(520px, calc(100dvh - 40px))",
+            background: "rgba(15, 23, 42, 0.95)",
+            color: "#f8fafc",
+            border: "1px solid rgba(59, 130, 246, 0.35)",
+            backdropFilter: "blur(12px)",
+            padding: "clamp(20px, 4vw, 28px)",
+            borderRadius: "18px",
+            width: "min(440px, calc(100vw - 32px))",
+            maxHeight: "min(560px, calc(100dvh - 40px))",
             overflowY: "auto",
-            boxShadow: "0 10px 35px rgba(0,0,0,0.4)",
+            boxShadow: "0 20px 45px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.08)",
             textAlign: "center"
           }}
         >
-          <h2 style={{ margin: "0 0 10px 0", fontSize: "20px" }}>{activeMission.title}</h2>
-          <p style={{ fontSize: "15px", lineHeight: "1.5" }}>{activeMission.text || activeMission.goal}</p>
-          <p style={{ color: "#666", fontSize: "13px" }}>
-            {interfaceLanguage === "ko" ? (
-              <span><strong>F</strong> 키 또는 대화 버튼을 눌러 NPC와 대화하세요.</span>
-            ) : (
-              <span>Talk to the NPC using <strong>F</strong> or tap prompt. Press <strong>F</strong> again to close dialogue.</span>
-            )}
-          </p>
+          {/* Badge */}
+          <div style={{ display: "inline-block", padding: "4px 12px", borderRadius: "999px", background: "rgba(59, 130, 246, 0.2)", border: "1px solid rgba(59, 130, 246, 0.4)", color: "#93c5fd", fontSize: "11px", fontWeight: "700", textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: "12px" }}>
+            {interfaceLanguage === "ko" ? "🎯 새로운 미션 목표" : "🎯 New Mission Objective"}
+          </div>
+
+          {/* Title */}
+          <h2 style={{ margin: "0 0 12px 0", fontSize: "21px", color: "#ffffff", fontWeight: "800" }}>
+            {activeMission.title}
+          </h2>
+
+          {/* Objective / Description */}
+          <div style={{ background: "rgba(255, 255, 255, 0.05)", border: "1px solid rgba(255, 255, 255, 0.08)", borderRadius: "12px", padding: "14px", marginBottom: "16px", textAlign: "left" }}>
+            <div style={{ fontSize: "11px", fontWeight: "700", color: "#38bdf8", textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: "4px" }}>
+              {interfaceLanguage === "ko" ? "미션 과제" : "Task"}
+            </div>
+            <p style={{ margin: 0, fontSize: "15px", lineHeight: "1.5", color: "#e2e8f0", fontWeight: "500" }}>
+              {activeMission.goal || activeMission.text}
+            </p>
+          </div>
+
+          {/* Required Items & Exact Conditions (if applicable) */}
+          {activeMission.requiredItems && Object.keys(activeMission.requiredItems).length > 0 && (
+            <div style={{ background: "rgba(30, 41, 59, 0.7)", border: "1px solid rgba(59, 130, 246, 0.2)", borderRadius: "12px", padding: "12px 14px", marginBottom: "16px", textAlign: "left" }}>
+              <div style={{ fontSize: "11px", fontWeight: "700", color: "#60a5fa", textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: "8px" }}>
+                {interfaceLanguage === "ko" ? "📋 필수 수집 물품" : "📋 Required Items"}
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                {Object.entries(activeMission.requiredItems).map(([itemId, qty]) => {
+                  const def = ITEM_DEFINITIONS[itemId];
+                  const itemName = getLocalizedItemName(itemId, interfaceLanguage) || def?.displayName || itemId;
+                  return (
+                    <div key={itemId} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: "13px", padding: "4px 8px", background: "rgba(255, 255, 255, 0.04)", borderRadius: "6px" }}>
+                      <span>{def?.icon || "📦"} {itemName}</span>
+                      <strong style={{ color: "#38bdf8" }}>{interfaceLanguage === "ko" ? `${qty}개` : `${qty}`}</strong>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Relevant Task Instructions & Guidance */}
+          <div style={{ fontSize: "12px", color: "#94a3b8", lineHeight: "1.45", marginBottom: "18px", textAlign: "left", background: "rgba(255, 255, 255, 0.02)", padding: "10px 12px", borderRadius: "10px" }}>
+            <p style={{ margin: "0 0 6px 0" }}>
+              💡 {interfaceLanguage === "ko" ? (
+                <span>NPC는 미션 정답이나 해결법을 대신 안내하지 않습니다. 상황에 맞게 직접 대화하고 행동을 완수하세요.</span>
+              ) : (
+                <span>NPCs will not complete the mission for you or give away solutions. Converse naturally and discover what to do on your own.</span>
+              )}
+            </p>
+            <p style={{ margin: 0, color: "#64748b", fontSize: "11px" }}>
+              {interfaceLanguage === "ko" ? (
+                <span><strong>F</strong> 키 또는 대화 버튼으로 대화 | 퇴장 문을 통해 나가면 평가가 시작됩니다.</span>
+              ) : (
+                <span>Press <strong>F</strong> or tap prompt to speak | Evaluation begins upon leaving via door.</span>
+              )}
+            </p>
+          </div>
+
+          {/* Action Button */}
           <button
             type="button"
-            onClick={() => setActiveMission(null)}
+            onClick={() => setShowMissionIntro(false)}
             style={{
-              marginTop: "15px",
-              padding: "12px 28px",
+              width: "100%",
+              padding: "12px",
               border: "none",
-              borderRadius: "10px",
-              background: "#222",
-              color: "white",
+              borderRadius: "12px",
+              background: "linear-gradient(135deg, #2563eb, #1d4ed8)",
+              color: "#ffffff",
               cursor: "pointer",
               fontSize: "15px",
-              fontWeight: "600",
-              minHeight: "44px"
+              fontWeight: "700",
+              minHeight: "44px",
+              boxShadow: "0 4px 14px rgba(37, 99, 235, 0.4)",
+              transition: "transform 0.1s ease, filter 0.2s ease"
             }}
           >
-            {interfaceLanguage === "ko" ? "미션 시작" : "Start Mission"}
+            {interfaceLanguage === "ko" ? "미션 시작하기" : "Start Mission"}
           </button>
         </div>
       )}
