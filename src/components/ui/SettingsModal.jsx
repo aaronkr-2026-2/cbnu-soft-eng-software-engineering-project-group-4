@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from "react";
 import { t, getLanguageName, getLevelName } from "../../services/i18n";
+import { getStoredQualityPreference, setStoredQualityPreference } from "../../services/renderingQualityEngine";
 
 /**
  * SettingsModal
  * Allows the user to independently switch Interface Language, Learning Language,
- * and Learning Level. Applies changes immediately to the UI and persists to Firestore.
+ * Learning Level, and 3D Graphics Rendering Quality (Auto, Low, Medium, High).
+ * Applies changes immediately to the UI and persists to storage.
  */
 export function SettingsModal(props) {
   if (!props.isOpen) return null;
@@ -16,11 +18,15 @@ function SettingsModalDialog({
   initialInterfaceLanguage = "en",
   initialLearningLanguage = "en",
   initialLearningLevel = "beginner",
+  initialQualityPreference = null,
   onSave
 }) {
   const [interfaceLanguage, setInterfaceLanguage] = useState(initialInterfaceLanguage || "en");
   const [learningLanguage, setLearningLanguage] = useState(initialLearningLanguage || "en");
   const [learningLevel, setLearningLevel] = useState(initialLearningLevel || "beginner");
+  const [qualityPreference, setQualityPreference] = useState(
+    initialQualityPreference || getStoredQualityPreference()
+  );
   const [saving, setSaving] = useState(false);
   const [feedbackMsg, setFeedbackMsg] = useState(null);
   const [feedbackType, setFeedbackType] = useState("success");
@@ -42,11 +48,13 @@ function SettingsModalDialog({
     setSaving(true);
     setFeedbackMsg(null);
     try {
+      setStoredQualityPreference(qualityPreference);
       if (onSave) {
         await onSave({
           interfaceLanguage,
           learningLanguage,
-          learningLevel
+          learningLevel,
+          qualityPreference
         });
       }
       setFeedbackType("success");
@@ -79,6 +87,13 @@ function SettingsModalDialog({
     { id: "advanced", name: getLevelName("advanced", currentLang) }
   ];
 
+  const QUALITY_OPTIONS = [
+    { id: "auto", name: currentLang === "ko" ? "⚡ 자동 (권장)" : "⚡ Auto (Adaptive)", desc: currentLang === "ko" ? "기기 성능에 맞춤" : "Adapts to device" },
+    { id: "low", name: currentLang === "ko" ? "🚀 낮음 (원활)" : "🚀 Low (Smooth)", desc: currentLang === "ko" ? "스마트폰 & 저사양용" : "For phones & laptops" },
+    { id: "medium", name: currentLang === "ko" ? "⚖️ 보통 (균형)" : "⚖️ Medium (Balanced)", desc: currentLang === "ko" ? "부드러운 표준 품질" : "Standard balanced" },
+    { id: "high", name: currentLang === "ko" ? "✨ 높음 (고화질)" : "✨ High (Cinematic)", desc: currentLang === "ko" ? "풀 그래픽 & 그림자" : "Full fidelity & shadows" }
+  ];
+
   return (
     <div
       role="dialog"
@@ -101,26 +116,25 @@ function SettingsModalDialog({
       }}
     >
       <div
-        className="modal-scrollable"
         onClick={(e) => e.stopPropagation()}
         style={{
-          background: "linear-gradient(145deg, #181824 0%, #101018 100%)",
-          border: "1px solid rgba(255, 255, 255, 0.14)",
-          borderRadius: "20px",
           width: "100%",
-          maxWidth: "480px",
-          maxHeight: "min(680px, calc(100dvh - 32px))",
+          maxWidth: "460px",
+          maxHeight: "90dvh",
           overflowY: "auto",
-          padding: "clamp(20px, 4vw, 28px) clamp(16px, 4vw, 30px)",
-          boxShadow: "0 25px 60px rgba(0, 0, 0, 0.8), 0 0 1px rgba(255, 255, 255, 0.3)",
+          background: "linear-gradient(180deg, #1e293b 0%, #0f172a 100%)",
+          border: "1px solid rgba(255, 255, 255, 0.12)",
+          borderRadius: "20px",
+          padding: "24px",
+          boxShadow: "0 24px 60px rgba(0, 0, 0, 0.55)",
           color: "#f8fafc",
-          fontFamily: "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif"
+          fontFamily: "system-ui, -apple-system, sans-serif"
         }}
       >
         {/* Header */}
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "22px" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px" }}>
           <h2 id="settings-modal-title" style={{ margin: 0, fontSize: "20px", fontWeight: "700" }}>
-            ⚙️ {t("settings.modalTitle", {}, currentLang)}
+            ⚙️ {t("settings.title", {}, currentLang)}
           </h2>
           <button
             type="button"
@@ -130,12 +144,10 @@ function SettingsModalDialog({
               background: "rgba(255, 255, 255, 0.08)",
               border: "none",
               color: "#94a3b8",
-              width: "44px",
-              height: "44px",
-              minWidth: "44px",
-              minHeight: "44px",
+              fontSize: "18px",
+              width: "32px",
+              height: "32px",
               borderRadius: "50%",
-              fontSize: "22px",
               cursor: "pointer",
               display: "flex",
               alignItems: "center",
@@ -149,31 +161,26 @@ function SettingsModalDialog({
         {/* Feedback Alert */}
         {feedbackMsg && (
           <div
+            role="status"
+            aria-live="polite"
             style={{
               padding: "10px 14px",
               borderRadius: "10px",
-              marginBottom: "18px",
+              marginBottom: "16px",
               fontSize: "13px",
-              background:
-                feedbackType === "success"
-                  ? "rgba(34, 197, 94, 0.16)"
-                  : "rgba(239, 68, 68, 0.16)",
-              border:
-                feedbackType === "success"
-                  ? "1px solid rgba(34, 197, 94, 0.35)"
-                  : "1px solid rgba(239, 68, 68, 0.35)",
+              background: feedbackType === "success" ? "rgba(34, 197, 94, 0.18)" : "rgba(239, 68, 68, 0.18)",
+              border: feedbackType === "success" ? "1px solid rgba(34, 197, 94, 0.4)" : "1px solid rgba(239, 68, 68, 0.4)",
               color: feedbackType === "success" ? "#86efac" : "#fca5a5"
             }}
           >
-            {feedbackType === "success" ? "✓ " : "⚠️ "}
             {feedbackMsg}
           </div>
         )}
 
         {/* 1. Interface Language Selector */}
-        <div style={{ marginBottom: "22px" }}>
+        <div style={{ marginBottom: "20px" }}>
           <div style={{ fontSize: "14px", fontWeight: "600", color: "#f1f5f9", marginBottom: "4px" }}>
-            🖥️ {t("settings.interfaceLangLabel", {}, currentLang)}
+            🌐 {t("settings.interfaceLangLabel", {}, currentLang)}
           </div>
           <div style={{ fontSize: "12px", color: "#94a3b8", marginBottom: "10px", lineHeight: 1.35 }}>
             {t("settings.interfaceLangDesc", {}, currentLang)}
@@ -210,7 +217,7 @@ function SettingsModalDialog({
         </div>
 
         {/* 2. Learning Language Selector */}
-        <div style={{ marginBottom: "22px" }}>
+        <div style={{ marginBottom: "20px" }}>
           <div style={{ fontSize: "14px", fontWeight: "600", color: "#f1f5f9", marginBottom: "4px" }}>
             🗣️ {t("settings.learningLangLabel", {}, currentLang)}
           </div>
@@ -249,7 +256,7 @@ function SettingsModalDialog({
         </div>
 
         {/* 3. Learning Level Selector */}
-        <div style={{ marginBottom: "28px" }}>
+        <div style={{ marginBottom: "20px" }}>
           <div style={{ fontSize: "14px", fontWeight: "600", color: "#f1f5f9", marginBottom: "4px" }}>
             📊 {t("settings.levelLabel", {}, currentLang)}
           </div>
@@ -277,6 +284,47 @@ function SettingsModalDialog({
                   }}
                 >
                   {opt.name}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* 4. 3D Graphics & Rendering Performance Profile */}
+        <div style={{ marginBottom: "26px" }}>
+          <div style={{ fontSize: "14px", fontWeight: "600", color: "#f1f5f9", marginBottom: "4px" }}>
+            🎮 {currentLang === "ko" ? "3D 그래픽 및 성능 품질" : "3D Graphics & Performance"}
+          </div>
+          <div style={{ fontSize: "12px", color: "#94a3b8", marginBottom: "10px", lineHeight: 1.35 }}>
+            {currentLang === "ko"
+              ? "기기 성능에 맞게 렌더링 해상도와 그림자 설정을 조정합니다."
+              : "Adjust resolution and shadows for smooth 60 FPS on your hardware."}
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>
+            {QUALITY_OPTIONS.map((opt) => {
+              const active = qualityPreference === opt.id;
+              return (
+                <button
+                  key={opt.id}
+                  type="button"
+                  onClick={() => setQualityPreference(opt.id)}
+                  style={{
+                    padding: "10px",
+                    borderRadius: "10px",
+                    textAlign: "left",
+                    border: active ? "2px solid #3b82f6" : "1px solid rgba(255, 255, 255, 0.1)",
+                    background: active ? "rgba(37, 99, 235, 0.22)" : "rgba(255, 255, 255, 0.04)",
+                    color: active ? "#93c5fd" : "#cbd5e1",
+                    cursor: "pointer",
+                    transition: "all 0.15s ease"
+                  }}
+                >
+                  <div style={{ fontWeight: active ? "600" : "500", fontSize: "12px" }}>
+                    {opt.name}
+                  </div>
+                  <div style={{ fontSize: "10px", color: active ? "#bfdbfe" : "#64748b", marginTop: "2px" }}>
+                    {opt.desc}
+                  </div>
                 </button>
               );
             })}
@@ -327,5 +375,3 @@ function SettingsModalDialog({
     </div>
   );
 }
-
-export default SettingsModal;

@@ -12,7 +12,8 @@ export function VillageBuilding({
   modelPath,
   position = [0, 0, 0],
   rotation = [0, 0, 0],
-  scale = [7, 7, 7]
+  scale = [7, 7, 7],
+  enableShadows = true
 }) {
   const gltf = useGLTF(modelPath);
 
@@ -55,8 +56,8 @@ export function VillageBuilding({
     } else {
       scene.traverse((child) => {
         if (child.isMesh) {
-          child.castShadow = true;
-          child.receiveShadow = true;
+          child.castShadow = enableShadows;
+          child.receiveShadow = enableShadows;
           if (child.material && child.material.map) {
             child.material.map.colorSpace = THREE.SRGBColorSpace;
           }
@@ -65,7 +66,7 @@ export function VillageBuilding({
     }
 
     return scene;
-  }, [gltf, modelPath]);
+  }, [gltf, modelPath, enableShadows]);
 
   return (
     <group position={position} rotation={rotation} scale={scale}>
@@ -78,9 +79,9 @@ export function VillageBuilding({
  * VillageBuildings: Renders all modular village houses (Types A through E)
  * and Education & Community District buildings (F through K).
  */
-export function VillageBuildings() {
+export function VillageBuildings({ enableShadows = true }) {
   return (
-    <group>
+    <group name="village-buildings">
       {/* Kenney village buildings */}
       {VILLAGE_BUILDINGS.map((b) => (
         <VillageBuilding
@@ -89,24 +90,25 @@ export function VillageBuildings() {
           position={b.position}
           rotation={b.rotation}
           scale={b.scale}
+          enableShadows={enableShadows}
         />
       ))}
 
       {/* District Entrance Threshold Steps */}
       {DISTRICT_STEPS.map((s) => (
-        <mesh key={s.id} position={s.position} receiveShadow>
+        <mesh key={s.id} position={s.position} receiveShadow={enableShadows}>
           <boxGeometry args={[2.2, 0.08, 0.7]} />
           <meshStandardMaterial color="#88929b" roughness={0.7} />
         </mesh>
       ))}
 
-      {/* Exterior Building Signs */}
+      {/* High-visibility bilingual building signage */}
       <VillageSigns />
     </group>
   );
 }
 
-// Preload all building models for seamless instant rendering
+// Preload models for instant responsive loading
 useGLTF.preload("/models/village/building-type-a.glb");
 useGLTF.preload("/models/village/building-type-b.glb");
 useGLTF.preload("/models/village/building-type-c.glb");
@@ -118,4 +120,3 @@ useGLTF.preload("/models/village/building-type-i.glb");
 useGLTF.preload("/models/village/building-type-j.glb");
 useGLTF.preload("/models/village/building-type-k.glb");
 useGLTF.preload("/models/skyscraper.glb");
-

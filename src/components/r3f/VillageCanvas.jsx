@@ -1,5 +1,5 @@
 import React, { Suspense } from "react";
-import { Canvas } from "@react-three/fiber";
+import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { Environment } from "./Environment";
 import { VillageBuildings } from "./VillageBuildings";
 import { Traffic } from "./Traffic";
@@ -18,6 +18,33 @@ import { ActivityCenter } from "./ActivityCenter";
 import { MultiPurposeHall } from "./MultiPurposeHall";
 import { Player } from "./Player";
 import { CameraController } from "./CameraController";
+import { resolveActiveQualityConfig } from "../../services/renderingQualityEngine";
+
+/**
+ * PerformanceMonitor: Hooks into R3F frame loop to drive dynamic FPS adaptation
+ * and expose real-time WebGL metrics (draw calls, triangles) for diagnosis.
+ */
+function PerformanceMonitor({ fpsAdapter }) {
+  const { gl } = useThree();
+
+  useFrame((_, delta) => {
+    if (fpsAdapter) {
+      fpsAdapter.update(delta);
+    }
+
+    if (typeof window !== "undefined") {
+      window.__THREE_PERF__ = {
+        calls: gl.info?.render?.calls ?? 0,
+        triangles: gl.info?.render?.triangles ?? 0,
+        geometries: gl.info?.memory?.geometries ?? 0,
+        textures: gl.info?.memory?.textures ?? 0,
+        programs: gl.info?.programs?.length ?? 0
+      };
+    }
+  });
+
+  return null;
+}
 
 export function VillageCanvas({
   playerRef,
@@ -33,13 +60,24 @@ export function VillageCanvas({
   onInteractDoor,
   onInteractNPC,
   joystickVecRef,
-  recenterSignalRef
+  recenterSignalRef,
+  qualityConfig = null,
+  fpsAdapter = null
 }) {
+  const quality = qualityConfig || resolveActiveQualityConfig();
+  const enableShadows = Boolean(quality.shadows);
+
   return (
     <Canvas
-      dpr={[1, 1.5]}
-      shadows
+      dpr={quality.dpr}
+      shadows={enableShadows}
       camera={{ fov: 70, position: [0, 5, 10], near: 0.1, far: 1000 }}
+      gl={{
+        antialias: quality.activeTier !== "low",
+        powerPreference: quality.activeTier === "low" ? "low-power" : "high-performance",
+        stencil: false,
+        depth: true
+      }}
       style={{
         width: "100%",
         height: "100%",
@@ -49,20 +87,23 @@ export function VillageCanvas({
         outline: "none"
       }}
     >
-      {/* Osmon foni va masofaviy atmosfera tuman */}
-      <color attach="background" args={["#87ceeb"]} />
-      <fog attach="fog" args={["#87ceeb", 100, 360]} />
+      {/* Dynamic FPS Adapter & Diagnostics */}
+      <PerformanceMonitor fpsAdapter={fpsAdapter} />
 
-      {/* Yorug'lik va toza soya (Shadow acne-siz) */}
+      {/* Osmon foni va adaptiv masofaviy atmosfera tuman */}
+      <color attach="background" args={["#87ceeb"]} />
+      <fog attach="fog" args={["#87ceeb", quality.fogNear, quality.fogFar]} />
+
+      {/* Yorug'lik va adaptiv toza soya */}
       <ambientLight intensity={0.95} />
       <directionalLight
         position={[10, 25, 10]}
-        intensity={1.25}
-        castShadow
-        shadow-bias={-0.0005}
-        shadow-normalBias={0.04}
-        shadow-mapSize-width={1024}
-        shadow-mapSize-height={1024}
+        intensity={quality.directionalLightIntensity}
+        castShadow={enableShadows}
+        shadow-bias={quality.enableShadowAcneFilter ? -0.0005 : -0.001}
+        shadow-normalBias={quality.enableShadowAcneFilter ? 0.04 : 0.0}
+        shadow-mapSize-width={quality.shadowMapSize}
+        shadow-mapSize-height={quality.shadowMapSize}
         shadow-camera-near={0.5}
         shadow-camera-far={60}
         shadow-camera-left={-25}
@@ -77,8 +118,8 @@ export function VillageCanvas({
             building no longer re-clones models, re-creates sign textures, or
             re-uploads everything to the GPU in a single frame. */}
         <group visible={currentLocation === "outside"}>
-          <Environment />
-          <VillageBuildings />
+          <Environment enableShadows={enableShadows} />
+          <VillageBuildings enableShadows={enableShadows} />
           <Traffic isOutside={currentLocation === "outside"} />
         </group>
         <Shop

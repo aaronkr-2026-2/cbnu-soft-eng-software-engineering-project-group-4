@@ -133,15 +133,33 @@ export function MiniMap({
     return null;
   }, [activeMission]);
 
-  // Real-time 60fps player tracking loop without triggering React component re-renders
+  // Real-time 60fps player tracking loop with idle throttling to eliminate unnecessary DOM recalculations
   useEffect(() => {
     let animId;
+    let lastPx = null;
+    let lastPz = null;
+    let lastRotY = null;
 
     const updatePosition = () => {
       if (playerRef?.current) {
         const px = playerRef.current.position.x;
         const pz = playerRef.current.position.z;
         const rotY = playerRef.current.rotation.y || 0;
+
+        // Skip DOM writes if player hasn't moved or turned
+        if (
+          lastPx !== null &&
+          Math.abs(px - lastPx) < 0.005 &&
+          Math.abs(pz - lastPz) < 0.005 &&
+          Math.abs(rotY - lastRotY) < 0.005
+        ) {
+          animId = requestAnimationFrame(updatePosition);
+          return;
+        }
+
+        lastPx = px;
+        lastPz = pz;
+        lastRotY = rotY;
 
         // Map X: [-28, 28] -> [2%, 98%]
         const leftPercent = Math.max(

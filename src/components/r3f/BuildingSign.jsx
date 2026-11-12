@@ -1,10 +1,12 @@
-import React, { useMemo } from "react";
+import React, { useMemo, useEffect } from "react";
 import * as THREE from "three";
 
 /**
  * Reusable, lightweight, high-readability 3D building sign.
  * Features:
- * - High-resolution canvas-rendered bilingual typography (English + Korean)
+ * - High-readability canvas-rendered bilingual typography (English + Korean)
+ * - Optimized 512x128 canvas texture (75% VRAM reduction compared to 1024x256)
+ * - Automatic texture disposal on unmount to eliminate memory leaks
  * - Beveled trim rails and side end-caps matching the building's signature theme
  * - Rear wall-mount anchor brackets so the sign looks structurally anchored
  * - Overhead decorative lantern fixture with emissive glow
@@ -22,39 +24,39 @@ export function BuildingSign({
   subtitleColor = null,
   lampColor = "#fef08a"
 }) {
-  // Generate high-resolution, crisp text texture (1024 x 256)
+  // Generate crisp, memory-optimized text texture (512 x 128)
   const signTexture = useMemo(() => {
     const canvas = document.createElement("canvas");
-    canvas.width = 1024;
-    canvas.height = 256;
+    canvas.width = 512;
+    canvas.height = 128;
     const ctx = canvas.getContext("2d");
     if (!ctx) return null;
 
     // 1. Crisp white signboard background
     ctx.fillStyle = "#ffffff";
-    ctx.fillRect(0, 0, 1024, 256);
+    ctx.fillRect(0, 0, 512, 128);
 
     // 2. Signature accent border frame
     ctx.strokeStyle = accentColor;
-    ctx.lineWidth = 14;
-    ctx.strokeRect(8, 8, 1008, 240);
+    ctx.lineWidth = 7;
+    ctx.strokeRect(4, 4, 504, 120);
 
     // 3. Top accent indicator bar
     ctx.fillStyle = accentColor;
-    ctx.fillRect(20, 20, 984, 8);
+    ctx.fillRect(10, 10, 492, 4);
 
     // 4. Large bold English building title
     ctx.fillStyle = textColor;
-    ctx.font = "bold 76px system-ui, -apple-system, sans-serif";
+    ctx.font = "bold 38px system-ui, -apple-system, sans-serif";
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
-    ctx.fillText(title, 512, 100);
+    ctx.fillText(title, 256, 50);
 
     // 5. Korean subtitle
     if (subtitle) {
       ctx.fillStyle = subtitleColor || accentColor;
-      ctx.font = "bold 44px system-ui, -apple-system, sans-serif";
-      ctx.fillText(subtitle, 512, 185);
+      ctx.font = "bold 22px system-ui, -apple-system, sans-serif";
+      ctx.fillText(subtitle, 256, 92);
     }
 
     const texture = new THREE.CanvasTexture(canvas);
@@ -63,6 +65,13 @@ export function BuildingSign({
     texture.magFilter = THREE.LinearFilter;
     return texture;
   }, [title, subtitle, accentColor, textColor, subtitleColor]);
+
+  // Clean up texture GPU memory when unmounted
+  useEffect(() => {
+    return () => {
+      if (signTexture) signTexture.dispose();
+    };
+  }, [signTexture]);
 
   // Reusable materials
   const materials = useMemo(() => {
@@ -104,37 +113,41 @@ export function BuildingSign({
         <boxGeometry args={[width + 0.08, 0.07, 0.14]} />
       </mesh>
 
-      {/* Left End-Cap */}
+      {/* Left End-cap Trim */}
       <mesh position={[-width / 2 - 0.03, 0, 0.01]} material={materials.trim}>
-        <boxGeometry args={[0.07, height + 0.13, 0.14]} />
+        <boxGeometry args={[0.06, height + 0.12, 0.14]} />
       </mesh>
 
-      {/* Right End-Cap */}
+      {/* Right End-cap Trim */}
       <mesh position={[width / 2 + 0.03, 0, 0.01]} material={materials.trim}>
-        <boxGeometry args={[0.07, height + 0.13, 0.14]} />
+        <boxGeometry args={[0.06, height + 0.12, 0.14]} />
       </mesh>
 
-      {/* Front Plaque with High-Contrast Canvas Texture */}
+      {/* High-Resolution Printed Signboard Facade */}
       {signTexture && (
         <mesh position={[0, 0, 0.065]}>
-          <planeGeometry args={[width - 0.18, height - 0.18]} />
-          <meshStandardMaterial map={signTexture} roughness={0.25} />
+          <planeGeometry args={[width - 0.12, height - 0.12]} />
+          <meshBasicMaterial map={signTexture} />
         </mesh>
       )}
 
-      {/* Overhead Decorative Lantern Lamp */}
-      <group position={[0, height / 2 + 0.15, 0.16]}>
-        {/* Support arm */}
-        <mesh position={[0, 0.06, -0.08]} material={materials.lampFixture}>
-          <boxGeometry args={[0.04, 0.04, 0.16]} />
+      {/* Overhead Gooseneck Lamp Fixture */}
+      <group position={[0, height / 2 + 0.06, 0.05]}>
+        {/* Horizontal mounting arm extending out */}
+        <mesh position={[0, 0.22, 0.32]} material={materials.lampFixture}>
+          <boxGeometry args={[0.05, 0.05, 0.58]} />
         </mesh>
-        {/* Lamp Hood */}
-        <mesh position={[0, 0.05, 0]} material={materials.lampFixture}>
-          <cylinderGeometry args={[0.08, 0.14, 0.06, 12]} />
+        {/* Vertical drop stalk */}
+        <mesh position={[0, 0.14, 0.58]} material={materials.lampFixture}>
+          <boxGeometry args={[0.05, 0.16, 0.05]} />
         </mesh>
-        {/* Glowing bulb */}
-        <mesh position={[0, 0, 0]} material={materials.lampGlow}>
-          <sphereGeometry args={[0.06, 12, 12]} />
+        {/* Lamp shade cowl */}
+        <mesh position={[0, 0.06, 0.58]} material={materials.lampFixture}>
+          <cylinderGeometry args={[0.12, 0.24, 0.1, 10]} />
+        </mesh>
+        {/* Warm emissive bulb glow panel facing downwards towards the sign */}
+        <mesh position={[0, 0.01, 0.58]} material={materials.lampGlow}>
+          <circleGeometry args={[0.14, 10]} />
         </mesh>
       </group>
     </group>

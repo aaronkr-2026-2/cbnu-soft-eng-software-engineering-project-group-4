@@ -1,10 +1,17 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState, useMemo } from "react";
 import { VillageCanvas } from "./components/r3f/VillageCanvas";
 import { MiniMap } from "./components/ui/MiniMap";
 import { ProgressPanelModal } from "./components/ui/ProgressPanelModal";
 import { SettingsModal } from "./components/ui/SettingsModal";
 import { MobileJoystick } from "./components/ui/MobileJoystick";
 import { MobileActionButtons } from "./components/ui/MobileActionButtons";
+import {
+  resolveActiveQualityConfig,
+  getStoredQualityPreference,
+  setStoredQualityPreference,
+  detectDeviceInitialQuality,
+  createDynamicFpsAdapter
+} from "./services/renderingQualityEngine";
 import {
   useDeviceCapabilities,
   getLayoutMode,
@@ -174,6 +181,22 @@ function App() {
   const [exitEvaluation, setExitEvaluation] = useState(null);
   const [isProgressPanelOpen, setIsProgressPanelOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [qualityPreference, setQualityPreference] = useState(() => getStoredQualityPreference());
+  const [dynamicTierOverride, setDynamicTierOverride] = useState(null);
+  const qualityConfig = useMemo(
+    () => resolveActiveQualityConfig(qualityPreference, dynamicTierOverride),
+    [qualityPreference, dynamicTierOverride]
+  );
+  const fpsAdapter = useMemo(
+    () =>
+      createDynamicFpsAdapter({
+        initialTier: qualityConfig.activeTier,
+        onQualityChange: (newTier) => {
+          setDynamicTierOverride(newTier);
+        }
+      }),
+    [qualityConfig.activeTier]
+  );
   const [localInterfaceLanguage, setLocalInterfaceLanguage] = useState(null);
   const resolvedPrefs = resolveUserLanguagePreferences(userProfile);
   const interfaceLanguage = localInterfaceLanguage || resolvedPrefs.interfaceLanguage;
@@ -354,8 +377,19 @@ function App() {
   const handleUpdateSettings = async ({
     interfaceLanguage: nextInterface,
     learningLanguage: nextLearning,
-    learningLevel: nextLevel
+    learningLevel: nextLevel,
+    qualityPreference: nextQuality
   }) => {
+    if (nextQuality) {
+      setQualityPreference(nextQuality);
+      setStoredQualityPreference(nextQuality);
+      setDynamicTierOverride(null);
+      if (fpsAdapter) {
+        fpsAdapter.reset(
+          nextQuality === "auto" ? detectDeviceInitialQuality() : nextQuality
+        );
+      }
+    }
     setInterfaceLanguage(nextInterface);
     learningLanguageRef.current = nextLearning;
     learningLevelRef.current = nextLevel;
@@ -1321,6 +1355,7 @@ JSON Schema:
         : null;
 
     if (uid && evaluationData) {
+
       try {
         const result = await recordMissionProgress(uid, missionData, evaluationData, attemptId, userTimeZone);
         failedAttemptRef.current = null;
@@ -2257,6 +2292,8 @@ JSON Schema:
         onInteractNPC={handleInteractNPC}
         joystickVecRef={joystickVecRef}
         recenterSignalRef={recenterSignalRef}
+        qualityConfig={qualityConfig}
+        fpsAdapter={fpsAdapter}
       />
 
       {/* Mobile Touch Gameplay Controls (Joystick & Action Buttons) */}
@@ -2999,6 +3036,7 @@ JSON Schema:
         initialInterfaceLanguage={interfaceLanguage}
         initialLearningLanguage={learningLanguage}
         initialLearningLevel={learningLevel}
+        initialQualityPreference={qualityPreference}
         onSave={handleUpdateSettings}
       />
 

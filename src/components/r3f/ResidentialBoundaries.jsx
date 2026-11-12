@@ -1,67 +1,8 @@
-import React from "react";
+import React, { useMemo, useRef, useEffect } from "react";
 import * as THREE from "three";
+import * as BufferGeometryUtils from "three/examples/jsm/utils/BufferGeometryUtils.js";
 
-/**
- * Low-poly Korean-style stone gate pillar ("대문 기둥").
- * Sturdy light-grey concrete/stone column with a dark cap stone and optional nameplate/mailbox.
- */
-function GatePillar({ position, hasMailbox = false, mailboxRot = 0 }) {
-  return (
-    <group position={position}>
-      {/* Stone Column Base */}
-      <mesh position={[0, 0.6, 0]} castShadow>
-        <boxGeometry args={[0.34, 1.2, 0.34]} />
-        <meshStandardMaterial color="#c2c7cc" roughness={0.8} />
-      </mesh>
-
-      {/* Stone Coping Cap */}
-      <mesh position={[0, 1.24, 0]} castShadow>
-        <boxGeometry args={[0.42, 0.08, 0.42]} />
-        <meshStandardMaterial color="#788089" roughness={0.7} />
-      </mesh>
-
-      {/* Detail: Mailbox / Nameplate */}
-      {hasMailbox && (
-        <mesh position={[0, 0.8, 0.19]} rotation={[0, mailboxRot, 0]}>
-          <boxGeometry args={[0.16, 0.22, 0.04]} />
-          <meshStandardMaterial color="#2d3748" roughness={0.5} />
-        </mesh>
-      )}
-    </group>
-  );
-}
-
-/**
- * Reusable low residential boundary wall / fence ("담장").
- * Low stone/concrete base topped with coping stone and a sleek dark metal top rail.
- * Total height: 0.62m (waist-height, keeping houses 100% visible and unobtrusive).
- */
-function BoundaryWall({ position, length, axis = "x" }) {
-  const isX = axis === "x";
-  return (
-    <group position={[position[0], 0, position[1]]}>
-      {/* Concrete / Stone Wall Base (height 0.42m) */}
-      <mesh position={[0, 0.21, 0]} castShadow receiveShadow>
-        <boxGeometry args={isX ? [length, 0.42, 0.18] : [0.18, 0.42, length]} />
-        <meshStandardMaterial color="#b0b7bd" roughness={0.85} />
-      </mesh>
-
-      {/* Coping Cap Stone (height 0.06m) */}
-      <mesh position={[0, 0.45, 0]}>
-        <boxGeometry args={isX ? [length + 0.04, 0.06, 0.22] : [0.22, 0.06, length + 0.04]} />
-        <meshStandardMaterial color="#788089" roughness={0.7} />
-      </mesh>
-
-      {/* Dark Metal Top Railing (height 0.12m) */}
-      <mesh position={[0, 0.58, 0]}>
-        <boxGeometry args={isX ? [length, 0.04, 0.04] : [0.04, 0.04, length]} />
-        <meshStandardMaterial color="#2d3748" roughness={0.6} />
-      </mesh>
-    </group>
-  );
-}
-
-// 10 Gate Pillars (2 pillars per building property entrance)
+// 18 Gate Pillars (2 pillars per building property entrance)
 const GATE_PILLARS = [
   // House A / Hotel (South front entrance along South Sidewalk)
   { position: [7.8, 0, 3.0], hasMailbox: true, mailboxRot: 0 },
@@ -133,7 +74,6 @@ const BOUNDARY_WALLS = [
   { position: [-1.6, 17.25], length: 8.5, axis: "z" },
 
   // --- Education & Community District Low Front Walls (Z = 32.6) ---
-  // Positioned outside entrance portals without blocking any pedestrian avenues or pathways
   { position: [-25.2, 32.6], length: 2.4, axis: "x" },
   { position: [-6.0, 32.6], length: 2.4, axis: "x" },
   { position: [6.0, 32.6], length: 2.4, axis: "x" },
@@ -142,52 +82,162 @@ const BOUNDARY_WALLS = [
 
 // Low-poly greenery bushes
 const DISTRICT_BUSHES = [
-  // Language School yard (F)
   { position: [-24.5, 0, 34.5], scale: 1.1, color: "#16a34a" },
   { position: [-19.5, 0, 34.5], scale: 0.9, color: "#22c55e" },
-  // Study Center yard (G)
   { position: [-12.0, 0, 34.5], scale: 1.0, color: "#15803d" },
   { position: [-7.0, 0, 34.5], scale: 0.9, color: "#22c55e" },
-  // Activity Center yard (J)
-  { position: [-18.5, 0, 47.0], scale: 1.05, color: "#16a34a" },
-  { position: [-13.5, 0, 47.0], scale: 0.85, color: "#15803d" },
-  // Community Center yard (H)
-  { position: [7.0, 0, 34.5], scale: 0.9, color: "#22c55e" },
-  { position: [12.0, 0, 34.5], scale: 1.05, color: "#16a34a" },
-  // Career Center yard (I)
+  { position: [7.0, 0, 34.5], scale: 1.0, color: "#16a34a" },
+  { position: [12.0, 0, 34.5], scale: 1.1, color: "#22c55e" },
   { position: [19.5, 0, 34.5], scale: 0.9, color: "#15803d" },
-  { position: [24.5, 0, 34.5], scale: 1.1, color: "#22c55e" },
-  // Multi-Purpose Hall yard (K)
-  { position: [13.5, 0, 47.0], scale: 0.85, color: "#16a34a" },
-  { position: [18.5, 0, 47.0], scale: 1.0, color: "#15803d" }
+  { position: [24.5, 0, 34.5], scale: 1.0, color: "#16a34a" },
+  { position: [-18.5, 0, 45.0], scale: 1.0, color: "#16a34a" },
+  { position: [-13.5, 0, 45.0], scale: 1.1, color: "#22c55e" },
+  { position: [13.5, 0, 45.0], scale: 1.1, color: "#15803d" },
+  { position: [18.5, 0, 45.0], scale: 0.9, color: "#16a34a" },
+  { position: [-2.0, 0, 36.8], scale: 0.85, color: "#16a34a" },
+  { position: [2.0, 0, 36.8], scale: 0.85, color: "#22c55e" }
 ];
 
-function GardenBush({ position, scale = 1.0, color = "#22c55e" }) {
+const FACILITY_TOTEMS = [
+  { position: [-21.0, 0, 34.5], title: "LANGUAGE SCHOOL", subtitle: "어학원", accentColor: "#0284c7" },
+  { position: [-8.5, 0, 34.5], title: "STUDY CENTER", subtitle: "학습관", accentColor: "#7c3aed" },
+  { position: [8.5, 0, 34.5], title: "COMMUNITY CENTER", subtitle: "주민센터", accentColor: "#059669" },
+  { position: [21.0, 0, 34.5], title: "CAREER CENTER", subtitle: "진로상담센터", accentColor: "#d97706" },
+  { position: [-15.0, 0, 45.5], title: "ACTIVITY CENTER", subtitle: "청소년활동관", accentColor: "#e11d48" },
+  { position: [15.0, 0, 45.5], title: "MULTI-PURPOSE HALL", subtitle: "다목적강당", accentColor: "#4f46e5" }
+];
+
+function BatchedBoundaryWalls() {
+  const { baseGeom, capGeom, railGeom, baseMat, capMat, railMat } = useMemo(() => {
+    const baseList = [];
+    const capList = [];
+    const railList = [];
+
+    BOUNDARY_WALLS.forEach((wall) => {
+      const isX = wall.axis === "x";
+      const x = wall.position[0];
+      const z = wall.position[1];
+
+      // Base
+      const bg = new THREE.BoxGeometry(isX ? wall.length : 0.18, 0.42, isX ? 0.18 : wall.length);
+      bg.translate(x, 0.21, z);
+      baseList.push(bg);
+
+      // Cap
+      const cg = new THREE.BoxGeometry(isX ? wall.length + 0.04 : 0.22, 0.06, isX ? 0.22 : wall.length + 0.04);
+      cg.translate(x, 0.45, z);
+      capList.push(cg);
+
+      // Rail
+      const rg = new THREE.BoxGeometry(isX ? wall.length : 0.04, 0.04, isX ? 0.04 : wall.length);
+      rg.translate(x, 0.58, z);
+      railList.push(rg);
+    });
+
+    const mBase = BufferGeometryUtils.mergeGeometries(baseList, false);
+    const mCap = BufferGeometryUtils.mergeGeometries(capList, false);
+    const mRail = BufferGeometryUtils.mergeGeometries(railList, false);
+    mBase.computeVertexNormals();
+    mCap.computeVertexNormals();
+    mRail.computeVertexNormals();
+
+    return {
+      baseGeom: mBase,
+      capGeom: mCap,
+      railGeom: mRail,
+      baseMat: new THREE.MeshStandardMaterial({ color: "#b0b7bd", roughness: 0.85 }),
+      capMat: new THREE.MeshStandardMaterial({ color: "#788089", roughness: 0.7 }),
+      railMat: new THREE.MeshStandardMaterial({ color: "#2d3748", roughness: 0.6 })
+    };
+  }, []);
+
   return (
-    <group position={position} scale={scale}>
-      <mesh position={[0, 0.32, 0]} castShadow receiveShadow>
-        <dodecahedronGeometry args={[0.34, 1]} />
-        <meshStandardMaterial color={color} roughness={0.85} />
-      </mesh>
+    <group name="batched-boundary-walls">
+      <mesh geometry={baseGeom} material={baseMat} castShadow receiveShadow />
+      <mesh geometry={capGeom} material={capMat} receiveShadow />
+      <mesh geometry={railGeom} material={railMat} />
     </group>
   );
 }
 
-// 6 Freestanding Entrance Totems (F through K)
-const FACILITY_TOTEMS = [
-  { position: [-20.4, 0, 33.2], title: "Language School", subtitle: "어학원", accentColor: "#0284c7" },
-  { position: [-7.9, 0, 33.2], title: "Study Center", subtitle: "학습센터", accentColor: "#7c3aed" },
-  { position: [7.9, 0, 33.2], title: "Community Center", subtitle: "주민센터", accentColor: "#059669" },
-  { position: [20.4, 0, 33.2], title: "Career Center", subtitle: "취업지원센터", accentColor: "#d97706" },
-  { position: [-14.5, 0, 44.5], title: "Activity Center", subtitle: "활동센터", accentColor: "#e11d48" },
-  { position: [14.5, 0, 44.5], title: "Multi-Purpose Hall", subtitle: "다목적홀", accentColor: "#4f46e5" }
-];
+function InstancedGatePillars() {
+  const pillarRef = useRef();
 
-/**
- * Modern freestanding information totem near facility entrances.
- */
+  const { geom, mat } = useMemo(() => {
+    const col = new THREE.BoxGeometry(0.34, 1.2, 0.34);
+    col.translate(0, 0.6, 0);
+
+    const cap = new THREE.BoxGeometry(0.42, 0.08, 0.42);
+    cap.translate(0, 1.24, 0);
+
+    const merged = BufferGeometryUtils.mergeGeometries([col, cap], false);
+    merged.computeVertexNormals();
+
+    return {
+      geom: merged,
+      mat: new THREE.MeshStandardMaterial({ color: "#9ca3af", roughness: 0.75 })
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!pillarRef.current) return;
+    const m = new THREE.Matrix4();
+    const q = new THREE.Quaternion();
+    const s = new THREE.Vector3(1, 1, 1);
+
+    GATE_PILLARS.forEach((p, i) => {
+      m.compose(new THREE.Vector3(...p.position), q, s);
+      pillarRef.current.setMatrixAt(i, m);
+    });
+    pillarRef.current.instanceMatrix.needsUpdate = true;
+  }, []);
+
+  return (
+    <instancedMesh
+      ref={pillarRef}
+      args={[geom, mat, GATE_PILLARS.length]}
+      castShadow
+      receiveShadow
+    />
+  );
+}
+
+function InstancedDistrictBushes() {
+  const bushRef = useRef();
+
+  const { geom, mat } = useMemo(() => {
+    const sphere = new THREE.DodecahedronGeometry(0.48, 1);
+    sphere.computeVertexNormals();
+    return {
+      geom: sphere,
+      mat: new THREE.MeshStandardMaterial({ color: "#16a34a", roughness: 0.85 })
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!bushRef.current) return;
+    const m = new THREE.Matrix4();
+    const q = new THREE.Quaternion();
+
+    DISTRICT_BUSHES.forEach((b, i) => {
+      const s = new THREE.Vector3(b.scale, b.scale, b.scale);
+      m.compose(new THREE.Vector3(b.position[0], b.position[1] + 0.48 * b.scale, b.position[2]), q, s);
+      bushRef.current.setMatrixAt(i, m);
+    });
+    bushRef.current.instanceMatrix.needsUpdate = true;
+  }, []);
+
+  return (
+    <instancedMesh
+      ref={bushRef}
+      args={[geom, mat, DISTRICT_BUSHES.length]}
+      receiveShadow
+    />
+  );
+}
+
 function FacilityEntranceTotem({ position, title, subtitle, accentColor }) {
-  const texture = React.useMemo(() => {
+  const texture = useMemo(() => {
     const canvas = document.createElement("canvas");
     canvas.width = 512;
     canvas.height = 256;
@@ -217,11 +267,11 @@ function FacilityEntranceTotem({ position, title, subtitle, accentColor }) {
 
   return (
     <group position={position}>
-      <mesh position={[0, 0.45, 0]} castShadow>
+      <mesh position={[0, 0.45, 0]}>
         <boxGeometry args={[0.08, 0.9, 0.08]} />
         <meshStandardMaterial color="#1e293b" roughness={0.6} />
       </mesh>
-      <mesh position={[0, 1.0, 0]} castShadow>
+      <mesh position={[0, 1.0, 0]}>
         <boxGeometry args={[0.55, 0.55, 0.05]} />
         <meshStandardMaterial color="#1e293b" roughness={0.5} />
       </mesh>
@@ -235,63 +285,47 @@ function FacilityEntranceTotem({ position, title, subtitle, accentColor }) {
   );
 }
 
-/**
- * Central District Directory kiosk in the Community Education Plaza.
- */
 function CentralDistrictDirectory({ position }) {
-  const texture = React.useMemo(() => {
+  const texture = useMemo(() => {
     const canvas = document.createElement("canvas");
-    canvas.width = 1024;
-    canvas.height = 512;
+    canvas.width = 512;
+    canvas.height = 256;
     const ctx = canvas.getContext("2d");
     if (!ctx) return null;
 
     ctx.fillStyle = "#0f172a";
-    ctx.fillRect(0, 0, 1024, 512);
+    ctx.fillRect(0, 0, 512, 256);
 
     ctx.fillStyle = "#0284c7";
-    ctx.fillRect(0, 0, 1024, 48);
+    ctx.fillRect(0, 0, 512, 28);
 
     ctx.fillStyle = "#ffffff";
-    ctx.font = "bold 44px system-ui, -apple-system, sans-serif";
+    ctx.font = "bold 26px system-ui, -apple-system, sans-serif";
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
-    ctx.fillText("EDUCATION & COMMUNITY DISTRICT", 512, 100);
+    ctx.fillText("EDUCATION & COMMUNITY DISTRICT", 256, 50);
 
-    ctx.fillStyle = "#38bdf8";
-    ctx.font = "bold 32px system-ui, -apple-system, sans-serif";
-    ctx.fillText("교육 및 주민 복합 지구 종합 안내", 512, 160);
+    ctx.fillStyle = "#94a3b8";
+    ctx.font = "bold 18px system-ui, -apple-system, sans-serif";
+    ctx.fillText("North Village Expansion Area", 256, 85);
 
-    ctx.strokeStyle = "#334155";
-    ctx.lineWidth = 3;
-    ctx.beginPath();
-    ctx.moveTo(80, 205);
-    ctx.lineTo(944, 205);
-    ctx.stroke();
+    const entries = [
+      "F - Language School (어학원)",
+      "G - Study Center (학습관)",
+      "H - Community Center (주민센터)",
+      "I - Career Center (진로상담센터)",
+      "J - Activity Center (청소년활동관)",
+      "K - Multi-Purpose Hall (다목적강당)"
+    ];
 
-    ctx.font = "bold 26px system-ui, -apple-system, sans-serif";
+    ctx.font = "16px monospace";
     ctx.textAlign = "left";
-
-    // Left Column
-    ctx.fillStyle = "#38bdf8";
-    ctx.fillText("• 어학원 (Language School)", 100, 260);
-    ctx.fillStyle = "#a78bfa";
-    ctx.fillText("• 학습센터 (Study Center)", 100, 330);
-    ctx.fillStyle = "#34d399";
-    ctx.fillText("• 주민센터 (Community Center)", 100, 400);
-
-    // Right Column
-    ctx.fillStyle = "#fbbf24";
-    ctx.fillText("• 취업지원센터 (Career Center)", 550, 260);
-    ctx.fillStyle = "#fb7185";
-    ctx.fillText("• 활동센터 (Activity Center)", 550, 330);
-    ctx.fillStyle = "#818cf8";
-    ctx.fillText("• 다목적홀 (Multi-Purpose Hall)", 550, 400);
-
-    ctx.fillStyle = "#64748b";
-    ctx.font = "italic 22px system-ui, -apple-system, sans-serif";
-    ctx.textAlign = "center";
-    ctx.fillText("AI Language Village Community Education Hub", 512, 465);
+    entries.forEach((entry, i) => {
+      const col = i < 3 ? 30 : 270;
+      const row = 125 + (i % 3) * 35;
+      ctx.fillStyle = "#e2e8f0";
+      ctx.fillText(entry, col, row);
+    });
 
     const tex = new THREE.CanvasTexture(canvas);
     tex.colorSpace = THREE.SRGBColorSpace;
@@ -300,152 +334,94 @@ function CentralDistrictDirectory({ position }) {
 
   return (
     <group position={position}>
-      <mesh position={[-0.7, 0.65, 0]} castShadow>
-        <boxGeometry args={[0.08, 1.3, 0.08]} />
+      <mesh position={[0, 0.65, 0]}>
+        <boxGeometry args={[1.5, 1.3, 0.12]} />
         <meshStandardMaterial color="#1e293b" roughness={0.6} />
-      </mesh>
-      <mesh position={[0.7, 0.65, 0]} castShadow>
-        <boxGeometry args={[0.08, 1.3, 0.08]} />
-        <meshStandardMaterial color="#1e293b" roughness={0.6} />
-      </mesh>
-      <mesh position={[0, 1.45, 0]} castShadow>
-        <boxGeometry args={[1.7, 0.95, 0.06]} />
-        <meshStandardMaterial color="#1e293b" roughness={0.5} />
       </mesh>
       {texture && (
-        <mesh position={[0, 1.45, 0.035]}>
-          <planeGeometry args={[1.64, 0.89]} />
-          <meshStandardMaterial map={texture} roughness={0.3} />
+        <mesh position={[0, 0.72, 0.065]}>
+          <planeGeometry args={[1.38, 0.95]} />
+          <meshStandardMaterial map={texture} roughness={0.4} />
         </mesh>
       )}
     </group>
   );
 }
 
-/**
- * Slatted wood and steel public plaza bench.
- */
-function PlazaBench({ position, rotation = [0, 0, 0] }) {
-  return (
-    <group position={position} rotation={rotation}>
-      <mesh position={[0, 0.42, 0]} castShadow receiveShadow>
-        <boxGeometry args={[1.4, 0.06, 0.44]} />
-        <meshStandardMaterial color="#8b5a2b" roughness={0.7} />
-      </mesh>
-      <mesh position={[0, 0.68, -0.19]} castShadow receiveShadow>
-        <boxGeometry args={[1.4, 0.36, 0.05]} />
-        <meshStandardMaterial color="#8b5a2b" roughness={0.7} />
-      </mesh>
-      <mesh position={[-0.6, 0.22, 0]} castShadow>
-        <boxGeometry args={[0.06, 0.44, 0.4]} />
-        <meshStandardMaterial color="#1e293b" roughness={0.5} />
-      </mesh>
-      <mesh position={[0.6, 0.22, 0]} castShadow>
-        <boxGeometry args={[0.06, 0.44, 0.4]} />
-        <meshStandardMaterial color="#1e293b" roughness={0.5} />
-      </mesh>
-    </group>
-  );
-}
-
-/**
- * Modern concrete square flower planter with colorful blossoms.
- */
-function PlazaPlanter({ position, flowerColor = "#facc15" }) {
-  return (
-    <group position={position}>
-      <mesh position={[0, 0.25, 0]} castShadow receiveShadow>
-        <boxGeometry args={[0.75, 0.5, 0.75]} />
-        <meshStandardMaterial color="#94a3b8" roughness={0.8} />
-      </mesh>
-      <mesh position={[0, 0.48, 0]}>
-        <boxGeometry args={[0.68, 0.04, 0.68]} />
-        <meshStandardMaterial color="#3e2723" roughness={0.9} />
-      </mesh>
-      <mesh position={[0, 0.62, 0]} castShadow>
-        <dodecahedronGeometry args={[0.32, 1]} />
-        <meshStandardMaterial color="#15803d" roughness={0.85} />
-      </mesh>
-      <mesh position={[0.15, 0.72, 0.1]}>
-        <sphereGeometry args={[0.06, 6, 6]} />
-        <meshStandardMaterial color={flowerColor} roughness={0.4} />
-      </mesh>
-      <mesh position={[-0.12, 0.68, -0.12]}>
-        <sphereGeometry args={[0.055, 6, 6]} />
-        <meshStandardMaterial color="#ffffff" roughness={0.4} />
-      </mesh>
-    </group>
-  );
-}
-
-/**
- * Modern decorative circular stone water fountain in the center of the plaza.
- */
 function PlazaFountain({ position }) {
   return (
     <group position={position}>
-      <mesh position={[0, 0.15, 0]} castShadow receiveShadow>
-        <cylinderGeometry args={[1.15, 1.25, 0.3, 20]} />
+      <mesh position={[0, 0.15, 0]} receiveShadow>
+        <cylinderGeometry args={[1.15, 1.25, 0.3, 16]} />
         <meshStandardMaterial color="#94a3b8" roughness={0.7} />
       </mesh>
       <mesh position={[0, 0.24, 0]} rotation={[-Math.PI / 2, 0, 0]}>
-        <circleGeometry args={[1.05, 20]} />
-        <meshStandardMaterial
-          color="#38bdf8"
-          roughness={0.15}
-          metalness={0.7}
-        />
+        <circleGeometry args={[1.05, 16]} />
+        <meshStandardMaterial color="#38bdf8" roughness={0.15} metalness={0.7} />
       </mesh>
-      <mesh position={[0, 0.45, 0]} castShadow>
-        <cylinderGeometry args={[0.22, 0.28, 0.45, 12]} />
+      <mesh position={[0, 0.45, 0]}>
+        <cylinderGeometry args={[0.22, 0.28, 0.45, 10]} />
         <meshStandardMaterial color="#64748b" roughness={0.6} />
       </mesh>
-      <mesh position={[0, 0.72, 0]} castShadow>
-        <sphereGeometry args={[0.16, 12, 12]} />
+      <mesh position={[0, 0.72, 0]}>
+        <sphereGeometry args={[0.16, 10, 8]} />
         <meshStandardMaterial color="#e2e8f0" roughness={0.4} />
       </mesh>
     </group>
   );
 }
 
-/**
- * ResidentialBoundaries: Boundary walls, entrance pillars,
- * and Community Education Plaza amenities.
- */
+function PlazaBench({ position, rotation = [0, 0, 0] }) {
+  return (
+    <group position={position} rotation={rotation}>
+      <mesh position={[0, 0.35, 0]}>
+        <boxGeometry args={[1.2, 0.06, 0.4]} />
+        <meshStandardMaterial color="#78350f" roughness={0.7} />
+      </mesh>
+      <mesh position={[-0.5, 0.17, 0]}>
+        <boxGeometry args={[0.08, 0.34, 0.36]} />
+        <meshStandardMaterial color="#1e293b" roughness={0.6} />
+      </mesh>
+      <mesh position={[0.5, 0.17, 0]}>
+        <boxGeometry args={[0.08, 0.34, 0.36]} />
+        <meshStandardMaterial color="#1e293b" roughness={0.6} />
+      </mesh>
+    </group>
+  );
+}
+
+function PlazaPlanter({ position, flowerColor = "#facc15" }) {
+  return (
+    <group position={position}>
+      <mesh position={[0, 0.25, 0]}>
+        <boxGeometry args={[0.7, 0.5, 0.7]} />
+        <meshStandardMaterial color="#475569" roughness={0.8} />
+      </mesh>
+      <mesh position={[0, 0.52, 0]}>
+        <boxGeometry args={[0.6, 0.1, 0.6]} />
+        <meshStandardMaterial color="#15803d" roughness={0.9} />
+      </mesh>
+      <mesh position={[0, 0.6, 0]}>
+        <sphereGeometry args={[0.22, 8, 8]} />
+        <meshStandardMaterial color={flowerColor} roughness={0.5} />
+      </mesh>
+    </group>
+  );
+}
+
 export function ResidentialBoundaries() {
   return (
-    <group>
-      {/* Gate Pillars */}
-      {GATE_PILLARS.map((pillar, idx) => (
-        <GatePillar
-          key={`gate-pillar-${idx}`}
-          position={pillar.position}
-          hasMailbox={pillar.hasMailbox}
-          mailboxRot={pillar.mailboxRot}
-        />
-      ))}
+    <group name="residential-boundaries">
+      {/* 1. Batched Boundary Walls (3 GPU draw calls for all 23 wall sections) */}
+      <BatchedBoundaryWalls />
 
-      {/* Low Boundary Walls */}
-      {BOUNDARY_WALLS.map((wall, idx) => (
-        <BoundaryWall
-          key={`boundary-wall-${idx}`}
-          position={wall.position}
-          length={wall.length}
-          axis={wall.axis}
-        />
-      ))}
+      {/* 2. Instanced Gate Pillars (1 GPU draw call for all 18 pillars) */}
+      <InstancedGatePillars />
 
-      {/* Low-Poly Greenery */}
-      {DISTRICT_BUSHES.map((bush, idx) => (
-        <GardenBush
-          key={`res-bush-${idx}`}
-          position={bush.position}
-          scale={bush.scale}
-          color={bush.color}
-        />
-      ))}
+      {/* 3. Instanced Greenery Bushes (1 GPU draw call for all 14 bushes) */}
+      <InstancedDistrictBushes />
 
-      {/* Facility Entrance Totems (Bilingual directory totem beside each building entrance) */}
+      {/* 4. Facility Totems */}
       {FACILITY_TOTEMS.map((totem, idx) => (
         <FacilityEntranceTotem
           key={`fac-totem-${idx}`}
@@ -456,19 +432,17 @@ export function ResidentialBoundaries() {
         />
       ))}
 
-      {/* Community Education Plaza: Central Directory Kiosk */}
+      {/* 5. Central Directory & Fountain */}
       <CentralDistrictDirectory position={[0.0, 0, 33.7]} />
-
-      {/* Community Education Plaza: Central Decorative Fountain */}
       <PlazaFountain position={[0.0, 0, 36.8]} />
 
-      {/* Community Education Plaza: 4 Public Benches */}
+      {/* 6. Plaza Benches */}
       <PlazaBench position={[-3.2, 0, 36.8]} rotation={[0, Math.PI / 2, 0]} />
       <PlazaBench position={[3.2, 0, 36.8]} rotation={[0, -Math.PI / 2, 0]} />
       <PlazaBench position={[-1.6, 0, 39.5]} rotation={[0, 0, 0]} />
       <PlazaBench position={[1.6, 0, 39.5]} rotation={[0, 0, 0]} />
 
-      {/* Community Education Plaza: 4 Corner Flower Planters */}
+      {/* 7. Plaza Planters */}
       <PlazaPlanter position={[-3.8, 0, 33.8]} flowerColor="#facc15" />
       <PlazaPlanter position={[3.8, 0, 33.8]} flowerColor="#ec4899" />
       <PlazaPlanter position={[-3.8, 0, 39.5]} flowerColor="#38bdf8" />

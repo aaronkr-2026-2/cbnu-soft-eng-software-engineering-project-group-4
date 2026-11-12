@@ -7,14 +7,11 @@ import { ResidentialBoundaries } from "./ResidentialBoundaries";
 import { WorldBackground } from "./WorldBackground";
 
 /**
- * VILLAGE_TREES: Carefully curated village tree placements.
- * All trees that obstructed roads (North Connector Avenue), sidewalks,
- * intersections, building entrances, or the pedestrian alley have been removed.
+ * VILLAGE_TREES: Curated village tree placements.
  * Roadside trees are placed safely on green grass verges, completely clear of pedestrian walkways.
  */
 const VILLAGE_TREES = [
   // 1. Roadside trees along North grass verge (behind North Sidewalk Z in [11.3, 13.0])
-  // Placed safely on the grass verge at Z = 14.0 - 14.2, avoiding sidewalks, curbs & street openings
   { x: -18.0, z: 14.0, scale: 1.05, rotY: 0.7 },
   { x: -14.5, z: 14.0, scale: 0.95, rotY: 2.1 },
   { x: -3.2,  z: 14.2, scale: 1.10, rotY: 4.2 },
@@ -35,13 +32,11 @@ const VILLAGE_TREES = [
   { x: -11.0, z: -16.0, scale: 0.95, rotY: 5.6 },
 
   // 4. Trees around House B (North-West Hospital lawn & perimeter)
-  // Obstructive trees inside the pedestrian alley (x: -0.8) have been removed
   { x: -16.5, z: 18.0, scale: 1.10, rotY: 4.8 },
   { x: -17.0, z: 22.0, scale: 0.90, rotY: 2.2 },
   { x: -14.5, z: 23.2, scale: 1.05, rotY: 0.5 },
 
   // 5. Trees around House E (North-East Police Station) & East Lawn
-  // Obstructive trees inside North Connector Avenue road (x: 11.0, 13.5) have been removed
   { x: 17.5,  z: 23.2, scale: 1.05, rotY: 1.1 },
   { x: 17.0,  z: 18.5, scale: 0.95, rotY: 4.6 },
   { x: 17.0,  z: 27.5, scale: 1.10, rotY: 2.7 },
@@ -60,7 +55,6 @@ const VILLAGE_TREES = [
   { x: 16.0,  z: 53.5, scale: 1.10, rotY: 1.8 },
   { x: 28.0,  z: 42.5, scale: 1.05, rotY: 5.0 },
   { x: 28.0,  z: 35.5, scale: 0.95, rotY: 1.1 },
-  // Community park lawn trees (placed safely on green lawn, clearing paved plaza & walkways)
   { x: -3.5,  z: 39.5, scale: 1.05, rotY: 2.7 },
   { x: 3.5,   z: 39.5, scale: 0.95, rotY: 1.2 }
 ];
@@ -68,11 +62,8 @@ const VILLAGE_TREES = [
 /**
  * InstancedVillageTrees:
  * High-performance batched tree rendering using Three.js InstancedMesh.
- * - Extracts clean normalized single-tree geometry from tree.glb (eliminating interior duplicate tree6 mesh).
- * - Renders all village trees in exactly 2 GPU draw calls (one for bark, one for leaves).
- * - Full shadow casting and receiving for rich visual depth.
  */
-function InstancedVillageTrees({ trees, treeGltf }) {
+function InstancedVillageTrees({ trees, treeGltf, enableShadows = true }) {
   const barkRef = useRef();
   const leavesRef = useRef();
 
@@ -91,51 +82,52 @@ function InstancedVillageTrees({ trees, treeGltf }) {
 
     if (!barkMesh || !leavesMesh) return {};
 
-    // Apply scene transforms into geometry
     const bGeom = barkMesh.geometry.clone().applyMatrix4(barkMesh.matrixWorld);
     const lGeom = leavesMesh.geometry.clone().applyMatrix4(leavesMesh.matrixWorld);
 
     bGeom.computeBoundingBox();
     lGeom.computeBoundingBox();
+
     const box = new THREE.Box3().union(bGeom.boundingBox).union(lGeom.boundingBox);
-    const center = box.getCenter(new THREE.Vector3());
     const size = box.getSize(new THREE.Vector3());
-    const scale = 3.8 / (size.y || 1);
+    const maxDim = Math.max(size.x, size.y, size.z) || 1;
+    const targetScale = 6.8 / maxDim;
 
-    // Normalize: center on X/Z, base at Y=0, scaled to standard 3.8m height
-    const normMatrix = new THREE.Matrix4()
-      .makeScale(scale, scale, scale)
-      .multiply(new THREE.Matrix4().makeTranslation(-center.x, -box.min.y, -center.z));
-
-    bGeom.applyMatrix4(normMatrix);
-    lGeom.applyMatrix4(normMatrix);
-    bGeom.computeVertexNormals();
-    lGeom.computeVertexNormals();
+    bGeom.scale(targetScale, targetScale, targetScale);
+    lGeom.scale(targetScale, targetScale, targetScale);
 
     const bMat = barkMesh.material.clone();
     const lMat = leavesMesh.material.clone();
+
     if (bMat.map) bMat.map.colorSpace = THREE.SRGBColorSpace;
     if (lMat.map) lMat.map.colorSpace = THREE.SRGBColorSpace;
 
-    return {
-      barkGeom: bGeom,
-      leavesGeom: lGeom,
-      barkMat: bMat,
-      leavesMat: lMat
-    };
+    bMat.roughness = 0.85;
+    lMat.roughness = 0.65;
+
+    return { barkGeom: bGeom, leavesGeom: lGeom, barkMat: bMat, leavesMat: lMat };
   }, [treeGltf]);
 
   useEffect(() => {
-    if (!barkRef.current || !leavesRef.current) return;
-    const dummy = new THREE.Object3D();
-    trees.forEach((pos, idx) => {
-      dummy.position.set(pos.x, 0, pos.z);
-      dummy.rotation.set(0, pos.rotY, 0);
-      dummy.scale.set(pos.scale, pos.scale, pos.scale);
-      dummy.updateMatrix();
-      barkRef.current.setMatrixAt(idx, dummy.matrix);
-      leavesRef.current.setMatrixAt(idx, dummy.matrix);
+    if (!barkRef.current || !leavesRef.current || !trees.length) return;
+
+    const matrix = new THREE.Matrix4();
+    const position = new THREE.Vector3();
+    const rotation = new THREE.Euler();
+    const quaternion = new THREE.Quaternion();
+    const scale = new THREE.Vector3();
+
+    trees.forEach((t, index) => {
+      position.set(t.x, 0, t.z);
+      rotation.set(0, t.rotY, 0);
+      quaternion.setFromEuler(rotation);
+      scale.set(t.scale, t.scale, t.scale);
+      matrix.compose(position, quaternion, scale);
+
+      barkRef.current.setMatrixAt(index, matrix);
+      leavesRef.current.setMatrixAt(index, matrix);
     });
+
     barkRef.current.instanceMatrix.needsUpdate = true;
     leavesRef.current.instanceMatrix.needsUpdate = true;
   }, [trees, barkGeom, leavesGeom]);
@@ -143,34 +135,31 @@ function InstancedVillageTrees({ trees, treeGltf }) {
   if (!barkGeom || !leavesGeom) return null;
 
   return (
-    <group name="village-trees-instanced">
+    <group name="instanced-village-trees">
       <instancedMesh
         ref={barkRef}
         args={[barkGeom, barkMat, trees.length]}
-        castShadow
+        castShadow={enableShadows}
         receiveShadow
       />
       <instancedMesh
         ref={leavesRef}
         args={[leavesGeom, leavesMat, trees.length]}
-        castShadow
+        castShadow={enableShadows}
         receiveShadow
       />
     </group>
   );
 }
 
-export function Environment() {
-  // Tree model
+export function Environment({ enableShadows = true }) {
   const treeGltf = useGLTF("/models/tree.glb");
-
-  // Skyscraper 2 (Tall building behind Cafe)
   const tower2Gltf = useGLTF("/models/skyscraper2.glb");
+
   const processedTower2 = useMemo(() => {
     const scene = tower2Gltf.scene.clone(true);
     scene.traverse((child) => {
       if (child.isMesh) {
-        // ~1.1M triangles: casting shadows doubled its cost every frame
         child.castShadow = false;
         child.receiveShadow = true;
         if (child.material && child.material.map) {
@@ -189,7 +178,7 @@ export function Environment() {
 
   return (
     <group name="village-environment">
-      {/* Maysazor zamin (kengaytirilgan shimoliy turar-joy hududi bilan) */}
+      {/* Maysazor zamin */}
       <mesh rotation={[-Math.PI / 2, 0, 0]} receiveShadow position={[0, 0, 12]}>
         <planeGeometry args={[65, 80]} />
         <meshStandardMaterial color="#55aa55" roughness={0.9} />
@@ -198,17 +187,17 @@ export function Environment() {
       {/* Qishloq yo'llari, yo'laklar va bordurlar */}
       <VillageRoads />
 
-      {/* Ko'cha chiroqlari */}
-      <StreetLights />
+      {/* Ko'cha chiroqlari (Batched InstancedMesh) */}
+      <StreetLights enableShadows={enableShadows} />
 
       {/* Koreys uslubidagi turar-joy past devorlari va darvoza ustunlari */}
       <ResidentialBoundaries />
 
-      {/* Baland bino (Kafe orqasida) */}
+      {/* Baland bino (Kafe orqasida - 268 tris ultra-lightweight) */}
       <primitive object={processedTower2} />
 
       {/* Qishloq daraxtlari (Optimallashtirilgan InstancedMesh) */}
-      <InstancedVillageTrees trees={VILLAGE_TREES} treeGltf={treeGltf} />
+      <InstancedVillageTrees trees={VILLAGE_TREES} treeGltf={treeGltf} enableShadows={enableShadows} />
 
       {/* Tabiiy atrof-muhit foni: Tog'lar (Shimol), O'rmon (Sharq), Okean (Janub), Megapolis (G'arb) */}
       <WorldBackground />
@@ -216,6 +205,5 @@ export function Environment() {
   );
 }
 
-// Preload models for fast instant load
 useGLTF.preload("/models/tree.glb");
 useGLTF.preload("/models/skyscraper2.glb");
