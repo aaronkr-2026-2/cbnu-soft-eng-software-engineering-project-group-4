@@ -17,6 +17,74 @@ export const GTA_TARGET_Y = 1.35;
 export const GTA_MIN_CAMERA_Y = 0.45;
 export const GTA_MIN_FOLLOW_RADIUS = 0.4;
 
+// Mobile-specific premium open-world third-person camera constants
+export const GTA_MOBILE_PORTRAIT_RADIUS = 5.10;
+export const GTA_MOBILE_PORTRAIT_BASE_PHI = 1.22;
+export const GTA_MOBILE_PORTRAIT_TARGET_Y = 1.15;
+
+export const GTA_MOBILE_LANDSCAPE_RADIUS = 4.10;
+export const GTA_MOBILE_LANDSCAPE_BASE_PHI = 1.30;
+export const GTA_MOBILE_LANDSCAPE_TARGET_Y = 1.20;
+
+export const GTA_TABLET_RADIUS = 4.30;
+export const GTA_TABLET_BASE_PHI = 1.35;
+export const GTA_TABLET_TARGET_Y = 1.25;
+
+/**
+ * Calculates adaptive camera parameters based on viewport aspect ratio and layout mode.
+ * - Mobile portrait: elevated perspective (phi=1.22), larger distance (5.1m), lower target (1.15m), adaptive FOV
+ * - Mobile landscape: wide distance (4.1m), pitch 1.30, FOV 65
+ * - Tablet: balanced distance (4.3m), pitch 1.35, FOV 68
+ * - Desktop: canonical GTA distance (3.55m), pitch 1.415, FOV 70
+ *
+ * @param {string} [layoutMode="desktop"]
+ * @param {number} [aspect=1.777]
+ * @returns {{ radius: number, basePhi: number, targetY: number, fov: number }}
+ */
+export function getAdaptiveCameraConfig(layoutMode = "desktop", aspect = 1.777) {
+  if (layoutMode === "mobile-portrait" || aspect < 0.75) {
+    // Adaptive FOV for tall mobile screens:
+    // When aspect is tall (e.g. 0.462 on iPhone), standard Three.js fov=70 produces only 35.8° hFOV.
+    // Expanding vertical FOV to ~80-82° ensures comfortable ~45-48° horizontal FOV
+    // while the increased radius (5.1m) pulls back to reveal the city.
+    const targetHFOVRad = (46 * Math.PI) / 180;
+    const computedVFOV = 2 * Math.atan(Math.tan(targetHFOVRad / 2) / Math.max(0.35, aspect)) * (180 / Math.PI);
+    const clampedVFOV = Math.max(76, Math.min(84, computedVFOV));
+
+    return {
+      radius: GTA_MOBILE_PORTRAIT_RADIUS,
+      basePhi: GTA_MOBILE_PORTRAIT_BASE_PHI,
+      targetY: GTA_MOBILE_PORTRAIT_TARGET_Y,
+      fov: clampedVFOV
+    };
+  }
+
+  if (layoutMode === "mobile-landscape" || (aspect >= 1.777 && typeof window !== "undefined" && window.innerHeight <= 500)) {
+    return {
+      radius: GTA_MOBILE_LANDSCAPE_RADIUS,
+      basePhi: GTA_MOBILE_LANDSCAPE_BASE_PHI,
+      targetY: GTA_MOBILE_LANDSCAPE_TARGET_Y,
+      fov: 65
+    };
+  }
+
+  if (layoutMode === "tablet" || (aspect >= 0.75 && aspect <= 1.25)) {
+    return {
+      radius: GTA_TABLET_RADIUS,
+      basePhi: GTA_TABLET_BASE_PHI,
+      targetY: GTA_TABLET_TARGET_Y,
+      fov: 68
+    };
+  }
+
+  return {
+    radius: GTA_OUTDOOR_RADIUS,
+    basePhi: GTA_OUTDOOR_BASE_PHI,
+    targetY: GTA_TARGET_Y,
+    fov: 70
+  };
+}
+
 export const OUTDOOR_BUILDINGS_COLLISION = [
   { name: "Shop", x: 0, z: -2.5, halfW: 3.8, halfD: 5.5 },
   { name: "Cafe", x: -12, z: 0, halfW: 4.0, halfD: 3.0 },

@@ -32,7 +32,8 @@ export function VillageCanvas({
   onPromptChange,
   onInteractDoor,
   onInteractNPC,
-  joystickVecRef
+  joystickVecRef,
+  recenterSignalRef
 }) {
   return (
     <Canvas
@@ -50,7 +51,7 @@ export function VillageCanvas({
     >
       {/* Osmon foni va masofaviy atmosfera tuman */}
       <color attach="background" args={["#87ceeb"]} />
-      <fog attach="fog" args={["#87ceeb", 90, 320]} />
+      <fog attach="fog" args={["#87ceeb", 100, 360]} />
 
       {/* Yorug'lik va toza soya (Shadow acne-siz) */}
       <ambientLight intensity={0.95} />
@@ -119,6 +120,7 @@ export function VillageCanvas({
           currentLocation={currentLocation}
           isDialogOpen={isDialogOpen}
           hasModalOpen={hasModalOpen}
+          recenterSignalRef={recenterSignalRef}
         />
       </Suspense>
     </Canvas>

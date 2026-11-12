@@ -2,12 +2,11 @@ import { useEffect, useRef } from "react";
 import { useThree, useFrame } from "@react-three/fiber";
 import {
   GTA_OUTDOOR_RADIUS,
-  GTA_OUTDOOR_BASE_PHI,
   GTA_MIN_PHI,
   GTA_MAX_PHI,
-  GTA_TARGET_Y,
   GTA_MIN_CAMERA_Y,
   GTA_MIN_FOLLOW_RADIUS,
+  getAdaptiveCameraConfig,
   checkCameraBuildingCollision,
   findSafeCameraAngle,
   resolveCameraBuildingPenetration
@@ -19,9 +18,10 @@ export function CameraController({
   cameraAnglesRef,
   currentLocation,
   isDialogOpen,
-  hasModalOpen = false
+  hasModalOpen = false,
+  recenterSignalRef
 }) {
-  const { camera } = useThree();
+  const { size } = useThree();
   const isDraggingRef = useRef(false);
   const prevMousePosRef = useRef({ x: 0, y: 0 });
   const isTouchDraggingRef = useRef(false);
@@ -32,6 +32,9 @@ export function CameraController({
   const prevPlayerPosRef = useRef({ x: 0, z: 0 });
   const smoothRadiusRef = useRef(GTA_OUTDOOR_RADIUS);
   const isInitializedRef = useRef(false);
+  const isRecenteringRef = useRef(false);
+  const recenterTimeRef = useRef(0);
+  const lastRecenterSignalRef = useRef(0);
 
   useEffect(() => {
     currentLocationRef.current = currentLocation;
@@ -54,6 +57,7 @@ export function CameraController({
         return;
       }
       isDraggingRef.current = true;
+      isRecenteringRef.current = false;
       prevMousePosRef.current = { x: e.clientX, y: e.clientY };
     };
 
@@ -116,6 +120,7 @@ export function CameraController({
 
       activeTouchIdRef.current = touch.identifier;
       isTouchDraggingRef.current = true;
+      isRecenteringRef.current = false;
       prevTouchPosRef.current = { x: touch.clientX, y: touch.clientY };
     };
 
@@ -372,14 +377,44 @@ export function CameraController({
       camZ = Math.min(maxZ, Math.max(minZ, camZ));
       camY = Math.max(1.3, Math.min(2.4, camY));
 
-      camera.position.set(camX, camY, camZ);
-      camera.lookAt(bX, targetY, bZ);
+      state.camera.position.set(camX, camY, camZ);
+      state.camera.lookAt(bX, targetY, bZ);
     } else {
+      // Check mobile camera recenter signal trigger
+      if (
+        recenterSignalRef?.current &&
+        recenterSignalRef.current !== lastRecenterSignalRef.current
+      ) {
+        lastRecenterSignalRef.current = recenterSignalRef.current;
+        isRecenteringRef.current = true;
+        recenterTimeRef.current = 0;
+      }
+
+      const aspect = size.width / Math.max(1, size.height);
+      const layoutMode =
+        size.width < 768
+          ? size.width >= size.height
+            ? "mobile-landscape"
+            : "mobile-portrait"
+          : size.width <= 1024
+            ? "tablet"
+            : "desktop";
+
+      const adaptiveConfig = getAdaptiveCameraConfig(layoutMode, aspect);
+
+      // Smoothly adjust camera vertical FOV to preserve horizontal FOV and panoramic city framing
+      if (Math.abs(state.camera.fov - adaptiveConfig.fov) > 0.1) {
+        state.camera.fov += (adaptiveConfig.fov - state.camera.fov) * (1.0 - Math.exp(-5.0 * delta));
+        state.camera.updateProjectionMatrix();
+      }
+
       if (!isInitializedRef.current) {
         prevPlayerPosRef.current = { x: playerPos.x, z: playerPos.z };
         if (angles.theta === 0 && playerRef.current.rotation.y === 0) {
           angles.theta = Math.PI;
         }
+        smoothRadiusRef.current = adaptiveConfig.radius;
+        angles.phi = adaptiveConfig.basePhi;
         isInitializedRef.current = true;
       }
 
@@ -393,7 +428,32 @@ export function CameraController({
       );
       prevPlayerPosRef.current = { x: playerPos.x, z: playerPos.z };
 
-      if (!isDraggingRef.current && !isTouchDraggingRef.current && isMoving) {
+      // Handle active mobile recenter animation
+      if (isRecenteringRef.current && !isDraggingRef.current && !isTouchDraggingRef.current) {
+        recenterTimeRef.current += delta;
+        const playerRotY = playerRef.current.rotation.y || 0;
+        const targetTheta = playerRotY + Math.PI;
+        let diffTheta = targetTheta - angles.theta;
+        diffTheta = Math.atan2(Math.sin(diffTheta), Math.cos(diffTheta));
+
+        const targetPhi = adaptiveConfig.basePhi;
+        const diffPhi = targetPhi - angles.phi;
+
+        const snapSpeed = 6.5;
+        const factor = 1.0 - Math.exp(-snapSpeed * delta);
+        angles.theta += diffTheta * factor;
+        angles.theta = Math.atan2(Math.sin(angles.theta), Math.cos(angles.theta));
+        angles.phi += diffPhi * factor;
+
+        if (
+          recenterTimeRef.current > 0.45 ||
+          (Math.abs(diffTheta) < 0.02 && Math.abs(diffPhi) < 0.02)
+        ) {
+          angles.theta = targetTheta;
+          angles.phi = targetPhi;
+          isRecenteringRef.current = false;
+        }
+      } else if (!isDraggingRef.current && !isTouchDraggingRef.current && isMoving) {
         const playerRotY = playerRef.current.rotation.y;
         const targetTheta = playerRotY + Math.PI;
         let diff = targetTheta - angles.theta;
@@ -407,17 +467,17 @@ export function CameraController({
         }
 
         const pitchRestoreSpeed = 1.2;
-        const pitchDiff = GTA_OUTDOOR_BASE_PHI - angles.phi;
+        const pitchDiff = adaptiveConfig.basePhi - angles.phi;
         angles.phi += pitchDiff * (1.0 - Math.exp(-pitchRestoreSpeed * delta));
       }
 
-      const targetRadius = angles.radius && angles.radius >= 2.5 && angles.radius <= 6.0
+      const targetRadius = angles.radius && angles.radius >= 2.5 && angles.radius <= 7.0
         ? angles.radius
-        : GTA_OUTDOOR_RADIUS;
+        : adaptiveConfig.radius;
 
       const currentPhi = Math.max(
         GTA_MIN_PHI,
-        Math.min(GTA_MAX_PHI, angles.phi || GTA_OUTDOOR_BASE_PHI)
+        Math.min(GTA_MAX_PHI, angles.phi || adaptiveConfig.basePhi)
       );
       angles.phi = currentPhi;
 
@@ -461,7 +521,7 @@ export function CameraController({
         lastLocationRef.current = currentLocation;
       }
 
-      const targetY = GTA_TARGET_Y;
+      const targetY = adaptiveConfig.targetY;
       const hDist = targetRadius * Math.sin(currentPhi);
       const desiredCamX = playerPos.x + hDist * Math.sin(angles.theta);
       const desiredCamZ = playerPos.z + hDist * Math.cos(angles.theta);
@@ -523,8 +583,8 @@ export function CameraController({
       camX = resolved.camX;
       camZ = resolved.camZ;
 
-      camera.position.set(camX, camY, camZ);
-      camera.lookAt(playerPos.x, targetY, playerPos.z);
+      state.camera.position.set(camX, camY, camZ);
+      state.camera.lookAt(playerPos.x, targetY, playerPos.z);
     }
   });
 

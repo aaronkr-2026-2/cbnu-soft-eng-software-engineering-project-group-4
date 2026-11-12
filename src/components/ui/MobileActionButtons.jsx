@@ -7,6 +7,7 @@ import { t } from "../../services/i18n";
  * - Keyboard [E]: Door enter/exit or Item pickup (INTERACT)
  * - Keyboard [F]: NPC Dialogue (TALK)
  * - Keyboard [M]: Statistics & Progress modal (STATS)
+ * - Camera Recenter: Align third-person camera directly behind player (RECENTER)
  *
  * @param {Object} props
  * @param {string|null} [props.doorPrompt] - Currently active door prompt name
@@ -15,6 +16,7 @@ import { t } from "../../services/i18n";
  * @param {() => void} props.onInteract - Action callback for door/item interaction (E)
  * @param {() => void} props.onTalk - Action callback for NPC dialogue (F)
  * @param {() => void} props.onToggleStats - Action callback for statistics (M)
+ * @param {() => void} [props.onRecenterCamera] - Action callback to recenter camera
  * @param {boolean} [props.disabled=false] - When true, disables buttons
  * @param {string} [props.interfaceLanguage="en"] - Language for accessibility labels
  */
@@ -25,6 +27,7 @@ export function MobileActionButtons({
   onInteract,
   onTalk,
   onToggleStats,
+  onRecenterCamera,
   disabled = false,
   interfaceLanguage = "en"
 }) {
@@ -66,13 +69,15 @@ export function MobileActionButtons({
         }
       `}</style>
 
-      {/* Row with Stats Button (Small, secondary) */}
+      {/* Secondary Controls Row (Camera Recenter + Stats) */}
       <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
+        {/* CAMERA RECENTER BUTTON */}
         <button
           type="button"
-          onClick={onToggleStats}
-          aria-label={t("hud.openStats", {}, interfaceLanguage) || "Statistics"}
-          title="Statistics (M)"
+          onClick={onRecenterCamera}
+          aria-label={interfaceLanguage === "ko" ? "시점 정렬" : "Recenter Camera"}
+          title={interfaceLanguage === "ko" ? "시점 정렬" : "Recenter Camera"}
+          className="mobile-btn-recenter"
           style={{
             width: "46px",
             height: "46px",
@@ -82,10 +87,11 @@ export function MobileActionButtons({
             background: "rgba(15, 23, 42, 0.85)",
             backdropFilter: "blur(8px)",
             WebkitBackdropFilter: "blur(8px)",
-            border: "1.5px solid rgba(168, 85, 247, 0.5)",
-            color: "#d8b4fe",
-            fontSize: "18px",
+            border: "1.5px solid rgba(56, 189, 248, 0.5)",
+            color: "#38bdf8",
+            fontSize: "17px",
             display: "flex",
+            flexDirection: "column",
             alignItems: "center",
             justifyContent: "center",
             boxShadow: "0 6px 18px rgba(0, 0, 0, 0.45)",
@@ -102,7 +108,52 @@ export function MobileActionButtons({
             e.currentTarget.style.transform = "scale(1)";
           }}
         >
-          📊
+          <span style={{ fontSize: "16px", lineHeight: 1 }}>🎯</span>
+          <span style={{ fontSize: "7.5px", fontWeight: "700", letterSpacing: "0.4px", marginTop: "1px" }}>
+            {interfaceLanguage === "ko" ? "시점" : "CAM"}
+          </span>
+        </button>
+
+        {/* STATS BUTTON */}
+        <button
+          type="button"
+          onClick={onToggleStats}
+          aria-label={t("hud.openStats", {}, interfaceLanguage) || "Statistics"}
+          title="Statistics (M)"
+          style={{
+            width: "46px",
+            height: "46px",
+            minWidth: "46px",
+            minHeight: "46px",
+            borderRadius: "50%",
+            background: "rgba(15, 23, 42, 0.85)",
+            backdropFilter: "blur(8px)",
+            WebkitBackdropFilter: "blur(8px)",
+            border: "1.5px solid rgba(168, 85, 247, 0.5)",
+            color: "#d8b4fe",
+            fontSize: "17px",
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            justifyContent: "center",
+            boxShadow: "0 6px 18px rgba(0, 0, 0, 0.45)",
+            cursor: "pointer",
+            transition: "transform 0.12s ease, background 0.15s ease"
+          }}
+          onPointerDown={(e) => {
+            e.currentTarget.style.transform = "scale(0.92)";
+          }}
+          onPointerUp={(e) => {
+            e.currentTarget.style.transform = "scale(1)";
+          }}
+          onPointerCancel={(e) => {
+            e.currentTarget.style.transform = "scale(1)";
+          }}
+        >
+          <span style={{ fontSize: "16px", lineHeight: 1 }}>📊</span>
+          <span style={{ fontSize: "7.5px", fontWeight: "700", letterSpacing: "0.4px", marginTop: "1px" }}>
+            {interfaceLanguage === "ko" ? "통계" : "STATS"}
+          </span>
         </button>
       </div>
 

@@ -2077,6 +2077,11 @@ JSON Schema:
     setIsProgressPanelOpen((prev) => !prev);
   };
 
+  const recenterSignalRef = useRef(0);
+  const handleMobileRecenterCamera = () => {
+    recenterSignalRef.current = Date.now();
+  };
+
   if (authLoading) {
     return (
       <div
@@ -2251,6 +2256,7 @@ JSON Schema:
         onInteractDoor={handleInteractDoor}
         onInteractNPC={handleInteractNPC}
         joystickVecRef={joystickVecRef}
+        recenterSignalRef={recenterSignalRef}
       />
 
       {/* Mobile Touch Gameplay Controls (Joystick & Action Buttons) */}
@@ -2274,6 +2280,7 @@ JSON Schema:
             onInteract={handleMobileInteract}
             onTalk={handleMobileTalk}
             onToggleStats={handleMobileStats}
+            onRecenterCamera={handleMobileRecenterCamera}
             disabled={
               dialogState.isOpen ||
               Boolean(exitEvaluation || isProgressPanelOpen || isSettingsOpen)
@@ -2484,6 +2491,23 @@ JSON Schema:
         </div>
       )}
 
+      {/* Floating Active Mission Objective Pill */}
+      {activeMission && !dialogState.isOpen && !exitEvaluation && (
+        <button
+          type="button"
+          onClick={() => setShowMissionIntro(true)}
+          className="mission-objective-pill hud-container"
+          title={interfaceLanguage === "ko" ? "미션 정보 보기 (터치)" : "View Mission Details (Tap)"}
+        >
+          <span style={{ fontSize: "14px" }}>🎯</span>
+          <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+            <span style={{ color: "#93c5fd" }}>{interfaceLanguage === "ko" ? "미션:" : "Mission:"}</span>{" "}
+            <strong>{activeMission.title}</strong>
+          </span>
+          <span style={{ fontSize: "10px", color: "#60a5fa", opacity: 0.85 }}>ℹ️</span>
+        </button>
+      )}
+
       {/* Real-time Village Minimap (Top-Right HUD) */}
       {!exitEvaluation && (
         <MiniMap
@@ -2491,6 +2515,7 @@ JSON Schema:
           currentLocation={currentLocation}
           interfaceLanguage={interfaceLanguage}
           compact={device.isMobile}
+          activeMission={activeMission}
         />
       )}
 
