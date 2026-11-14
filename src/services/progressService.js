@@ -11,7 +11,7 @@ import {
 import { db } from "./firebase";
 import { formatFirestoreError } from "./userService";
 
-export {
+import {
   calculateMissionXP,
   deriveFacilityName,
   getLocalDateString,
@@ -21,10 +21,15 @@ export {
   calculateProgressUpdate
 } from "./progressLogic.js";
 
-import {
+export {
+  calculateMissionXP,
   deriveFacilityName,
+  getLocalDateString,
+  getCalendarDayDiff,
+  calculateUpdatedStreak,
+  evaluateAchievements,
   calculateProgressUpdate
-} from "./progressLogic.js";
+};
 
 
 /**

@@ -331,6 +331,29 @@ function SettingsModalDialog({
           </div>
         </div>
 
+        {/* Privacy & AI Processing Disclosure */}
+        <div
+          style={{
+            padding: "10px 12px",
+            background: "rgba(15, 23, 42, 0.6)",
+            border: "1px solid rgba(255, 255, 255, 0.08)",
+            borderRadius: "10px",
+            fontSize: "11px",
+            color: "#94a3b8",
+            lineHeight: 1.4
+          }}
+        >
+          <div style={{ fontWeight: 600, color: "#cbd5e1", marginBottom: "2px", display: "flex", alignItems: "center", gap: "6px" }}>
+            <span>🔒</span>
+            <span>{currentLang === "ko" ? "개인정보 보호 및 AI 처리 안내" : "Privacy & AI Processing Notice"}</span>
+          </div>
+          <div>
+            {currentLang === "ko"
+              ? "학습자의 음성 대화 텍스트는 상황별 NPC 대화 및 미션 평가를 위해 안전한 백엔드 프록시(/api/chat)를 거쳐 Groq Cloud AI로 전송됩니다. API 키는 브라우저에 노출되지 않으며, 서버에서만 안전하게 관리됩니다."
+              : "Spoken dialogue transcripts are securely processed via our backend proxy (/api/chat) by Groq Cloud AI for NPC dialogue and mission evaluation. No API secrets are exposed to or stored in your browser."}
+          </div>
+        </div>
+
         {/* Actions */}
         <div style={{ display: "flex", gap: "10px", justifyContent: "flex-end" }}>
           <button

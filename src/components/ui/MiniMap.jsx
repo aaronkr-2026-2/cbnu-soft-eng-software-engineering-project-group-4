@@ -257,7 +257,7 @@ export function MiniMap({
           }}
         >
           {isExpandedView && (
-            <span style={{ fontSize: "9px", color: "rgba(255,255,255,0.5)", fontWeight: 700 }}>
+            <span style={{ fontSize: "9px", color: "#f1f5f9", fontWeight: 700 }}>
               🌳 PARK
             </span>
           )}
@@ -273,7 +273,7 @@ export function MiniMap({
             fontSize: isExpandedView ? "10px" : "7px",
             fontWeight: 800,
             letterSpacing: "0.6px",
-            color: "rgba(186, 230, 253, 0.8)",
+            color: "#bae6fd",
             whiteSpace: "nowrap"
           }}
         >
@@ -436,7 +436,7 @@ export function MiniMap({
             fontSize: isExpandedView ? "9px" : "7px",
             fontWeight: 800,
             letterSpacing: "0.8px",
-            color: "rgba(226, 232, 240, 0.65)"
+            color: "#f1f5f9"
           }}
         >
           MAIN STREET

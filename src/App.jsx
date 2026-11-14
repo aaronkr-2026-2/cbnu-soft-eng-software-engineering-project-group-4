@@ -67,13 +67,19 @@ import {
   getLanguageName,
   getLevelName
 } from "./services/i18n";
+import {
+  isDevAuthBypassAllowed,
+  sanitizeUserInputText,
+  MAX_CHAT_INPUT_LENGTH
+} from "./services/securityLogic";
+import { requestAIChat } from "./services/aiChatService";
 
 const OUTDOOR_RADIUS = 3.55;
 const OUTDOOR_BASE_PHI = 1.415;
 
 const isDevModeRequested =
   typeof window !== "undefined" &&
-  new URLSearchParams(window.location.search).get("dev") === "true";
+  isDevAuthBypassAllowed(Boolean(import.meta.env?.DEV), window.location.search);
 
 function App() {
   const [authUser, setAuthUser] = useState(() => {
@@ -836,7 +842,7 @@ function App() {
     };
   }, []);
 
-  // Groq AI
+  // Groq AI (via secure backend proxy /api/chat)
   const generateNPCResponseWithAI = async (userMessage, npc) => {
     // Prevent concurrent/duplicate requests
     if (isGeneratingRef.current) return;
@@ -844,24 +850,6 @@ function App() {
     setVoiceFeedback(null);
 
     setDialogState((prev) => ({ ...prev, status: "thinking" }));
-    const apiKey = import.meta.env.VITE_GROQ_API_KEY;
-
-    if (!apiKey) {
-      isGeneratingRef.current = false;
-      setVoiceFeedback(mapSpeechErrorToFeedback("api_error", interfaceLanguage));
-      const currentLearningLang = learningLanguageRef.current || learningLanguage;
-      const warning =
-        currentLearningLang === "ko"
-          ? "죄송합니다. 현재 대화 서비스에 연결할 수 없습니다."
-          : "I apologize, but I cannot connect to the conversation service right now.";
-      setDialogState((prev) => ({
-        ...prev,
-        status: "idle",
-        messages: [...prev.messages, { sender: "npc", text: warning }]
-      }));
-      speakText(warning, npc);
-      return;
-    }
 
     const currentLearningLang = learningLanguageRef.current || learningLanguage;
     const currentLearningLevel = learningLevelRef.current || learningLevel;
@@ -889,48 +877,17 @@ function App() {
     const timeoutId = setTimeout(() => controller.abort(), 15000);
 
     try {
-      const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-        method: "POST",
-        signal: controller.signal,
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${apiKey.trim()}`
-        },
-        body: JSON.stringify({
-          model: "openai/gpt-oss-120b",
-          messages: [
-            { role: "system", content: systemPrompt },
-            ...history
-          ],
-          max_tokens: 180,
-          temperature: 0.5
-        })
+      const rawReply = await requestAIChat({
+        messages: [
+          { role: "system", content: systemPrompt },
+          ...history
+        ],
+        max_tokens: 180,
+        temperature: 0.5,
+        signal: controller.signal
       });
 
       clearTimeout(timeoutId);
-
-      let data;
-      try {
-        data = await response.json();
-      } catch (jsonErr) {
-        console.error("[AI Diagnostic: JSON Parsing Failure]", jsonErr);
-        throw new Error(`JSON parsing failure: ${jsonErr.message}`);
-      }
-
-      if (!response.ok || data?.error) {
-        const errorMsg = data?.error?.message || `HTTP ${response.status}: ${response.statusText}`;
-        console.error("[AI Diagnostic: API Failure]", {
-          status: response.status,
-          statusText: response.statusText,
-          error: data?.error
-        });
-        throw new Error(`API error: ${errorMsg}`);
-      }
-
-      const rawReply = data?.choices?.[0]?.message?.content?.trim();
-      if (!rawReply) {
-        console.warn("[AI Diagnostic: Empty Reply Content]", data);
-      }
 
       const plan = handleAIResponse({
         rawReply,
@@ -1061,7 +1018,6 @@ function App() {
     const npcTitle = getExaminerNpcTitle(doorType, uiLang);
 
     try {
-      const apiKey = import.meta.env.VITE_GROQ_API_KEY;
       const isShop = doorType === "Exit Shop";
 
       const userSpeeches = messagesHistoryRef.current.filter((m) => m.sender === "user");
@@ -1150,30 +1106,20 @@ JSON Schema:
   "feedback": "..."
 }`;
 
-      const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${apiKey.trim()}`
-        },
-        body: JSON.stringify({
-          model: "openai/gpt-oss-120b",
-          messages: [
-            {
-              role: "system",
-              content: `You are a JSON-only generating assistant for spoken ${examinerTargetLang} analysis. Output pure JSON without markdown.`
-            },
-            {
-              role: "user",
-              content: evaluationSystemPrompt
-            }
-          ],
-          temperature: 0.2
-        })
+      let rawReply = await requestAIChat({
+        messages: [
+          {
+            role: "system",
+            content: `You are a JSON-only generating assistant for spoken ${examinerTargetLang} analysis. Output pure JSON without markdown.`
+          },
+          {
+            role: "user",
+            content: evaluationSystemPrompt
+          }
+        ],
+        temperature: 0.2,
+        max_tokens: 600
       });
-
-      const data = await response.json();
-      let rawReply = data?.choices?.[0]?.message?.content?.trim();
 
       if (!rawReply) throw new Error("Empty response received from evaluation model");
 
@@ -1703,13 +1649,14 @@ JSON Schema:
   }, []);
 
   const handleUserSpeech = (text) => {
-    if (!text || text.trim() === "") return;
-    messagesHistoryRef.current.push({ sender: "user", text });
+    const sanitized = sanitizeUserInputText(text, MAX_CHAT_INPUT_LENGTH);
+    if (!sanitized) return;
+    messagesHistoryRef.current.push({ sender: "user", text: sanitized });
     setDialogState((prev) => ({
       ...prev,
-      messages: [...prev.messages, { sender: "user", text }]
+      messages: [...prev.messages, { sender: "user", text: sanitized }]
     }));
-    generateNPCResponseWithAI(text, dialogState.npcName);
+    generateNPCResponseWithAI(sanitized, dialogState.npcName);
   };
 
   useEffect(() => {
@@ -3250,7 +3197,8 @@ JSON Schema:
             onSubmit={(e) => {
               e.preventDefault();
               const input = e.target.elements.chatInput;
-              if (input.value.trim() && dialogState.status !== "thinking" && !isGeneratingRef.current) {
+              const sanitizedText = sanitizeUserInputText(input?.value, MAX_CHAT_INPUT_LENGTH);
+              if (sanitizedText && dialogState.status !== "thinking" && !isGeneratingRef.current) {
                 if (dialogState.status === "speaking" && "speechSynthesis" in window) {
                   try {
                     window.speechSynthesis.cancel();
@@ -3258,8 +3206,8 @@ JSON Schema:
                   setReplayingMessageIndex(null);
                 }
                 setVoiceFeedback(null);
-                handleUserSpeech(input.value.trim());
-                input.value = "";
+                handleUserSpeech(sanitizedText);
+                if (input) input.value = "";
               }
             }}
             style={{
@@ -3273,6 +3221,7 @@ JSON Schema:
             <input
               name="chatInput"
               type="text"
+              maxLength={MAX_CHAT_INPUT_LENGTH}
               placeholder={t("dialog.inputPlaceholder", {
                 lang: getLanguageName(learningLanguage, interfaceLanguage)
               }, interfaceLanguage)}
